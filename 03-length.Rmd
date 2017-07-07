@@ -1,0 +1,298 @@
+# Length data {#length}
+
+```{r eval = FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+library(lubridate)
+library(stringr)
+library(tidyverse)
+```
+
+## Data download
+
+Download the raw data using the `getDATRAS` function from the [icesDatras](https://github.com/ices-tools-prod/icesDatras)-package and store it for later retrieval.
+```{r, eval = FALSE}
+# NOT RUN
+st <- 
+  icesDatras::getDATRAS("HH", "NS-IBTS", 2005:2017, c(1, 2, 3, 4)) %>% 
+  tbl_df()
+colnames(st) <- tolower(colnames(st))
+st <- 
+  st %>% 
+  # create a unique station id
+  unite(id, year, quarter, ship, gear, haulno, remove = FALSE) %>%
+  # get proper date
+  mutate(timeshot = stringr::str_pad(timeshot, width = 4, side = "left", pad = "0"),
+         timeshot = paste0(stringr::str_sub(timeshot, 1, 2),
+                           ":",
+                           stringr::str_sub(timeshot, 3, 4)),
+         datetime = lubridate::ymd_hm(paste(year, month, day, timeshot)))
+le <- 
+  icesDatras::getDATRAS("HL", "NS-IBTS", 2005:2017, c(1, 2, 3, 4)) %>%
+  tbl_df()
+colnames(le) <- tolower(colnames(le))
+ag <- 
+  icesDatras::getDATRAS("CA", "NS-IBTS", 2005:2017, c(1, 2, 3, 4)) %>%
+  tbl_df()
+colnames(ag) <- tolower(colnames(ag))
+NSIBTS <- list(st = st, le = le, ag = ag, common = common)
+save(NSIBTS, file = "data/NSIBTS.rda")
+```
+
+## Data processing
+
+### Load needed data
+
+* Load the DATRAS raw data previously downloaded
+* Read in table containing latin name, code type (T or W) and the corresponding code:
+
+```{r}
+attach("data/NSIBTS.rda")
+# read in species code
+sp <- read_csv("data-raw/SPCODE.csv")
+glimpse(sp)
+ns_area <- rgdal::readOGR("data-raw/NS_IBTS_RF.dbf")
+```
+
+```{r, eval = FALSE, echo = FALSE}
+#devtools::install_github("hadley/colformat")
+#devtools::install_github("ropenscilabs/skimr")
+skimr::skim(NSIBTS$st)
+skimr::skim(NSIBTS$le)
+skimr::skim(NSIBTS$ag)
+```
+
+### Tidy up the station data
+
+Here select only valid hauls and needed variables:
+```{r}
+ST <-
+  NSIBTS$st %>%
+  # only valid hauls
+  filter(haulval == "V") %>% 
+  select(id, survey, year, quarter, ship, gear, haulno, hauldur,
+         shootlat, shootlong, datetime, depth, #area,   - need to get this stuff
+         subarea = statrec, daynight, datatype)
+# get the area
+ST <-
+  ST %>% 
+  mutate(area = gisland::geo_inside(shootlong, shootlat, ns_area, "AreaName")) %>% 
+  filter(!is.na(area))
+```
+
+### Tidy up the length data
+
+Processing:
+
+* Only distinct records (they are all distinct)
+* Filter out data were species code, length-code and length-class are undefined
+* Set lengths to millimeter. In the raw records:
+    - If **lngtcode** is "1" then the **lngtclass** is in centimeters
+    - If **lngtcode** is "." or "0" then the **lngclass** is in millimeters
+* Standardise the **haul numbers at length**. In the raw data:
+    - If **datatype** in the station table is "C" then **hlnoatlngt** has been standardized to 60 minutes haul
+    - If **datatype** in the station table is "R" then **hlnoatlngt** has not been standardized to 60 minutes haul
+* Get the latin species name from the `sp`-table
+* Select only variable that are needed in further processing
+    
+```{r}
+LE <-
+  NSIBTS$le %>%
+  distinct() %>%
+  filter(!is.na(speccode), !is.na(lngtclass), !is.na(lngtcode)) %>%
+  unite(id, year, quarter, ship, gear, haulno) %>%
+  # only stations that are in the station table (north sea area)
+  filter(id %in% ST$id) %>% 
+  # length class to mm
+  mutate(length = ifelse(lngtcode %in% c("1"), lngtclass * 10, lngtclass),
+         hlnoatlngt = hlnoatlngt * subfactor) %>% 
+  # get the data type and hauldur
+  left_join(ST %>% select(id, datatype, hauldur)) %>% 
+  # catch per hour
+  mutate(n = ifelse(datatype == "R",
+                    hlnoatlngt * 60 / hauldur,
+                    hlnoatlngt)) %>% 
+  # join with latin name
+  left_join(sp) %>%
+  # select only needed columns
+  select(id, latin, sex, length, n)
+```
+
+## CPUE by length class
+
+### By each tow
+
+Since we are here ignoring sex in the analysis, we tally up the data by length class. This also tallies up the subfactor data:
+
+```{r}
+# tally up by sex
+le <-
+  LE %>%
+  group_by(id, latin, length) %>%
+  summarise(n = sum(n)) %>%
+  ungroup()
+```
+
+
+Limit the species in the analysis to "common" species (this step is not really necessary):
+```{r}
+common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
+            "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
+            "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
+le <-
+  le %>%
+  # only common species
+  filter(latin %in% common)
+glimpse(le)
+```
+
+#### Merging the station table and the length table
+
+Process:
+
+* The length table does not contain all the station tables for all species 
+
+```{r}
+cpue <-
+  ST %>%
+  left_join(le) %>% 
+  filter(!is.na(area))
+```
+
+#### Comparison
+```{r}
+cpue.datras.service.product <-
+  read_csv("~/prj2/bookdown/datrasdoodle/data-raw/CPUE per length per haul_2017-06-21 09_36_43.csv", na = "-9")
+colnames(cpue.datras.service.product) <- tolower(colnames(cpue.datras.service.product))
+#cpue.datras.service.product %>% filter(ship == "58G2") %>% select(survey:haulno, subarea)
+cpue.datras.service.product <-
+  cpue.datras.service.product %>%
+  unite(id, year, quarter, ship, gear, haulno, remove = FALSE) %>% 
+  select(id, latin = species, length = lngtclass, cpue.dsp = cpue_number_per_hour)
+
+diff <-
+  cpue %>%
+  filter(year < 2017) %>% 
+  select(id, latin, length, cpue.tidy = n) %>% 
+  full_join(cpue.datras.service.product) %>%
+  mutate(diff = !near(cpue.dsp, cpue.tidy, tol = 1e-4),
+         txt = ifelse(!diff, "Same",
+                      ifelse(diff, "Difference", "One of the value is NA")))
+diff %>% 
+  group_by(txt) %>% 
+  summarise(n.records = n()) %>% 
+  knitr::kable()
+```
+
+So we have 487411 records that are OK. We have 31146 values that are "NA" meaning that either of the cpue or both were missing. And then 953 records that are different.
+
+### By each tow - taking zero stations into account
+
+**Here I try to take "zero stations" into account:
+```{r}
+#st2 <- ST %>% filter(!is.na(area))
+st <- 
+  # Fill "a station table" for each species:
+  expand.grid(id = unique(ST$id),
+              latin = common,
+              stringsAsFactors = FALSE) %>% 
+  tbl_df()
+# stations with "missing species"
+# "return all rows from st where there are not matching values in length, keeping just columns from st."
+x <- 
+  anti_join(st, le %>% select(id, latin) %>% distinct()) %>% 
+  # fill with remainder of variables
+  left_join(ST) %>% 
+  # create a zero record
+  mutate(length = 0,
+         n = 0)
+cpue <-
+  ST %>%
+  left_join(le) %>% 
+  # add the zero stations
+  bind_rows(x) %>% 
+  filter(!is.na(latin),
+         year < 2017)
+
+diff <-
+  cpue %>%
+  select(id, latin, length, cpue.tidy = n) %>% 
+  full_join(cpue.datras.service.product) %>% 
+  mutate(diff = !near(cpue.dsp, cpue.tidy, tol = 1e-4),
+         txt = ifelse(!diff, "Same",
+                      ifelse(diff, "Difference", "One of the value is NA")))
+diff %>% 
+  group_by(txt) %>% 
+  summarise(n.records = n()) %>% 
+  knitr::kable()
+```
+
+Now we have 516950 records that are OK. We have 1668 values that are "NA" meaning that either of the cpue or both were missing. And then 953 records that are different.
+
+Lets see what difference there is in the overview:
+
+```{r}
+cpue.datras.service.product <-
+  read_csv("~/prj2/bookdown/datrasdoodle/data-raw/CPUE per length per haul_2017-06-21 09_36_43.csv", na = "-9")
+colnames(cpue.datras.service.product) <- tolower(colnames(cpue.datras.service.product))
+#cpue.datras.service.product %>% filter(ship == "58G2") %>% select(survey:haulno, subarea)
+cpue.datras.service.product <-
+  cpue.datras.service.product %>%
+  unite(id, year, quarter, ship, gear, haulno, remove = FALSE) %>% 
+  select(id, year, quarter, subarea, latin = species, length = lngtclass, n = cpue_number_per_hour) %>% 
+  mutate(source = "datras")
+cpue2 <- 
+  cpue %>% 
+  filter(!is.na(latin)) %>% 
+  select(id, year, quarter, subarea, latin, length, n) %>% 
+  mutate(source = "tidy")
+d <-
+  bind_rows(cpue.datras.service.product, cpue2) %>% 
+  group_by(source, year, quarter, latin, subarea) %>% 
+  summarise(n = mean(n)) %>% 
+  group_by(year, quarter, source, latin) %>% 
+  summarise(n = mean(n))
+d %>% 
+  filter(quarter %in% c(1, 3)) %>% 
+  mutate(split = paste(latin, quarter)) %>% 
+  ggplot(aes(year, n, colour = source)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~ split, scale = "free_y") +
+  scale_color_brewer(palette = "Set1") +
+  theme(legend.position = c(0.8, 0.1))
+```
+
+So overall, the difference is minor.
+
+**List of records that are different**:
+
+```{r}
+diff %>% filter(is.na(diff) | diff) %>% knitr::kable()
+```
+
+
+## Field names
+
+* **StNo**: National coding system, not defined by ICES
+* **HaulNo**: Sequential numbering of hauls during cruise. In CA-records: HaulNo = -9 for Area-based ALK HaulNo <> -9 and > 0 for Haul-based ALK
+* **DataType**:
+    - -9: Invalid haul
+    - C: Data calculated as CPUE (number per hour)
+    - R: Data by haul
+    - S: Subsample data
+* **SpecCodeType**:
+    - N: NODC code
+    - T: TSN code
+    - W: WoRMS ApiaID code
+* **LngtCode**:
+    - .:	1 mm length class, reporting units: mm
+    - 0:	0.5 cm length class, reporting units: mm
+    - 1:	1 cm length class, reporting units: cm
+* **CatIdentifier**: Category for subsampling for species, length, weight, and sex. If **DataType** is C, **CatIdentifier** is always 1. For further description and examples of use look up the manual.
+* **SubFactor**: Sub-sampling factor. If 1/6 of the catch was measured, report 6. If **DataType** is:
+    - C: it should be reported as 1. 
+    - S: it is always >1.
+    - R: the SubFactor is = 1 or >1 for different species depending on whether they were subsampled.

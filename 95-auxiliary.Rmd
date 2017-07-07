@@ -1,0 +1,118 @@
+# Auxiliary {#aux}
+
+QUESTIONS:
+
+* speccode: integer or character?
+
+```{r, eval = FALSE}
+library(datrasr)
+library(tidyverse)
+data(tsn)
+tsn <-
+  tsn %>%
+  rename(speccode = tsn,
+         latin = completename) %>% 
+  mutate(latin = as.character(latin),
+         speccode = as.character(speccode),
+         speccodetype = "T")
+worms <- 
+  read_csv("data-raw/AphiaID_List.csv") %>% 
+  rename(speccode = WoRMS_AphiaID_Valid,
+         latin = ScientificName_WoRMS) %>% 
+  mutate(speccode = ifelse(speccode == "NULL", NA_character_, speccode),
+         speccodetype = "W")
+
+SPCODE <-
+  bind_rows(tsn, worms) %>% 
+  distinct() %>% 
+  arrange(latin)
+write_csv(SPCODE, "data-raw/SPCODE.csv")
+sp <- "Gadus morhua"
+SPCODE %>% 
+  filter(latin == sp)
+
+sp <- "Pleuronectes platessa"
+SPCODE %>% 
+  filter(latin == sp)
+worms %>% filter(latin == sp)
+worms %>% filter(speccode == "127143")
+# hmmm, not finding the plaice
+```
+
+Another trial
+
+```{r, eval = FALSE}
+url <- "https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename=aphia&code=127143"
+out <- icesDatras:::readDatras(url)
+out <- icesDatras:::parseDatras(out)
+out
+
+url <- "https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename=tsn&code=172902"
+out <- icesDatras:::readDatras(url)
+out <- icesDatras:::parseDatras(out)
+out
+
+all <- datras2::read_exchange("data-raw/Exchange_Data_2017-06-19_11_12_50.csv")
+sp <- 
+  all$HL %>% 
+  select(speccodetype, speccode) %>% 
+  distinct() %>% 
+  mutate(speccode = as.integer(speccode)) %>% 
+  filter(!is.na(speccode))
+tsn <- 
+  sp %>% 
+  filter(speccodetype == "T")
+tsn <- tsn$speccode
+
+out.tsn <- list()
+for(i in 1:length(tsn)) {
+  out.tsn[[i]] <- paste0("https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename=tsn&code=",
+                tsn[i]) %>% 
+    icesDatras:::readDatras() %>% 
+    icesDatras:::parseDatras()
+}
+
+aphia <- 
+  sp %>% 
+  filter(speccodetype == "W")
+aphia <- aphia$speccode
+
+out.aphia <- list()
+for(i in 1:length(aphia)) {
+  out.aphia[[i]] <- paste0("https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename=aphia&code=",
+                aphia[i]) %>% 
+    icesDatras:::readDatras() %>% 
+    icesDatras:::parseDatras()
+}
+
+SPCODE <-
+  bind_rows(out.tsn) %>% 
+  bind_rows(bind_rows(out.aphia)) %>% 
+  tbl_df() %>% 
+  select(aphia, tsn, latin = latinname) %>% 
+  distinct() %>% 
+  arrange(latin) %>% 
+  gather(speccodetype, speccode, -latin) %>% 
+  mutate(speccodetype = ifelse(speccodetype == "aphia", "W", "T"),
+         speccode = as.character(speccode))
+
+SPCODE %>% filter(latin == "Pleuronectes platessa")
+
+write_csv(SPCODE, "data-raw/SPCODE.csv")
+```
+
+
+```{r, eval = FALSE}
+library(datrasr)
+DatrasSpeciesCodes %>% 
+  tbl_df() %>% 
+  rename(latin = scientific.name,
+         speccodetype = code_type,
+         speccode = code_number) %>% 
+  mutate(latin = as.character(latin),
+         speccodetype = toupper(as.character(speccodetype))) %>% 
+  distinct() %>% 
+  select(speccodetype, speccode, latin) ->
+  datras_species_codes
+devtools::use_data(datras_species_codes, overwrite = TRUE)
+```

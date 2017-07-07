@@ -1,0 +1,10 @@
+bookdown::gitbook:
+  css: style.css
+  config:
+    toc:
+      before: |
+        <li><a href="./">Exploring datras data</a></li>
+      after: |
+        <li><a href="https://github.com/einarhjorleifsson/datrasdoodle" target="blank">Published with bookdown</a></li>
+    edit: https://github.com/einarhjorleifsson/datrasdoodle/edit/master/%s
+

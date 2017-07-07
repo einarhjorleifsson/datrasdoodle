@@ -1,0 +1,10 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+R
+_book
+_bookdown_files
+data
+data-raw
+rep
