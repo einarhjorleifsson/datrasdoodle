@@ -1,2 +1,35 @@
-# Importing Datras data {#import}
+# Importing data {#import}
 
+## Data download
+
+Download the raw data using the `getDATRAS` function from the [icesDatras](https://github.com/ices-tools-prod/icesDatras)-package and store it for later retrieval.
+
+```{r, eval = FALSE}
+# NOT RUN
+st <- 
+  icesDatras::getDATRAS("HH", "NS-IBTS", 2005:2017, c(1, 2, 3, 4)) %>% 
+  tbl_df()
+colnames(st) <- tolower(colnames(st))
+st <- 
+  st %>% 
+  # create a unique station id
+  unite(id, year, quarter, ship, gear, haulno, remove = FALSE) %>%
+  # get proper date
+  mutate(timeshot = stringr::str_pad(timeshot, width = 4, side = "left", pad = "0"),
+         timeshot = paste0(stringr::str_sub(timeshot, 1, 2),
+                           ":",
+                           stringr::str_sub(timeshot, 3, 4)),
+         datetime = lubridate::ymd_hm(paste(year, month, day, timeshot)))
+le <- 
+  icesDatras::getDATRAS("HL", "NS-IBTS", 2005:2017, c(1, 2, 3, 4)) %>%
+  tbl_df()
+colnames(le) <- tolower(colnames(le))
+ag <- 
+  icesDatras::getDATRAS("CA", "NS-IBTS", 2005:2017, c(1, 2, 3, 4)) %>%
+  tbl_df()
+colnames(ag) <- tolower(colnames(ag))
+NSIBTS <- list(st = st, le = le, ag = ag, common = common)
+save(NSIBTS, file = "data/NSIBTS.rda")
+```
+
+## Auxilliary data?

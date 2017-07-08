@@ -1,86 +1,12 @@
 # Length data {#length}
 
-```{r eval = FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
-```
-
-```{r}
-library(lubridate)
-library(stringr)
-library(tidyverse)
-```
-
-## Data download
-
-Download the raw data using the `getDATRAS` function from the [icesDatras](https://github.com/ices-tools-prod/icesDatras)-package and store it for later retrieval.
-```{r, eval = FALSE}
-# NOT RUN
-st <- 
-  icesDatras::getDATRAS("HH", "NS-IBTS", 2005:2017, c(1, 2, 3, 4)) %>% 
-  tbl_df()
-colnames(st) <- tolower(colnames(st))
-st <- 
-  st %>% 
-  # create a unique station id
-  unite(id, year, quarter, ship, gear, haulno, remove = FALSE) %>%
-  # get proper date
-  mutate(timeshot = stringr::str_pad(timeshot, width = 4, side = "left", pad = "0"),
-         timeshot = paste0(stringr::str_sub(timeshot, 1, 2),
-                           ":",
-                           stringr::str_sub(timeshot, 3, 4)),
-         datetime = lubridate::ymd_hm(paste(year, month, day, timeshot)))
-le <- 
-  icesDatras::getDATRAS("HL", "NS-IBTS", 2005:2017, c(1, 2, 3, 4)) %>%
-  tbl_df()
-colnames(le) <- tolower(colnames(le))
-ag <- 
-  icesDatras::getDATRAS("CA", "NS-IBTS", 2005:2017, c(1, 2, 3, 4)) %>%
-  tbl_df()
-colnames(ag) <- tolower(colnames(ag))
-NSIBTS <- list(st = st, le = le, ag = ag, common = common)
-save(NSIBTS, file = "data/NSIBTS.rda")
-```
-
 ## Data processing
 
 ### Load needed data
 
-* Load the DATRAS raw data previously downloaded
+* Load the DATRAS raw data previously imported
 * Read in table containing latin name, code type (T or W) and the corresponding code:
 
-```{r}
-attach("data/NSIBTS.rda")
-# read in species code
-sp <- read_csv("data-raw/SPCODE.csv")
-glimpse(sp)
-ns_area <- rgdal::readOGR("data-raw/NS_IBTS_RF.dbf")
-```
-
-```{r, eval = FALSE, echo = FALSE}
-#devtools::install_github("hadley/colformat")
-#devtools::install_github("ropenscilabs/skimr")
-skimr::skim(NSIBTS$st)
-skimr::skim(NSIBTS$le)
-skimr::skim(NSIBTS$ag)
-```
-
-### Tidy up the station data
-
-Here select only valid hauls and needed variables:
-```{r}
-ST <-
-  NSIBTS$st %>%
-  # only valid hauls
-  filter(haulval == "V") %>% 
-  select(id, survey, year, quarter, ship, gear, haulno, hauldur,
-         shootlat, shootlong, datetime, depth, #area,   - need to get this stuff
-         subarea = statrec, daynight, datatype)
-# get the area
-ST <-
-  ST %>% 
-  mutate(area = gisland::geo_inside(shootlong, shootlat, ns_area, "AreaName")) %>% 
-  filter(!is.na(area))
-```
 
 ### Tidy up the length data
 
@@ -98,6 +24,10 @@ Processing:
 * Select only variable that are needed in further processing
     
 ```{r}
+# read in species code
+sp <- read_csv("data-raw/SPCODE.csv")
+glimpse(sp)
+
 LE <-
   NSIBTS$le %>%
   distinct() %>%
