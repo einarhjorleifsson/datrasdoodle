@@ -1,5 +1,19 @@
 # Auxiliary {#aux}
 
+## North sea roundfish area
+
+```{r, message = FALSE}
+sf::st_read("data-raw/NS_IBTS_RF.dbf", quiet = TRUE) %>% 
+  mutate(AreaName = as.integer(AreaName)) %>% 
+  ggplot() +
+  theme_bw() +
+  geom_sf(aes(fill = factor(AreaName))) +
+  scale_fill_brewer(palette = "Set3") +
+  labs(title = "North Sea roundfish area",
+       subtitle = "Used for generation of age-length-keys",
+       fill = "ALK areas") 
+```
+
 
 ## Species code
 

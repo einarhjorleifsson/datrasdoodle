@@ -1,2 +1,32 @@
 # Age-length data {#alk}
 
+```{r, message = FALSE, warning = FALSE}
+d <- 
+  NSIBTS$ag %>% 
+  unite(id, year, quarter, ship, gear, haulno) %>% 
+  # turn everything to cm
+  mutate(length = ifelse(!lngtcode %in% c("1"), lngtclass / 10, lngtclass), 
+         indwgt = ifelse(indwgt <= 0, NA, indwgt)) %>% 
+  left_join(sp) %>% 
+  filter(latin == "Gadus morhua")
+d %>% 
+  ggplot(aes(length, indwgt)) +
+  geom_point(size = 0.25)
+
+# here ignore year and quarter
+alk <- 
+  d %>% 
+  # get round fish area
+  left_join(ST %>% select(id, area)) %>% 
+  group_by(area, latin, age, length) %>% 
+  summarise(n = sum(noatalk)) %>% 
+  ungroup()
+library(viridis)
+alk %>% 
+  mutate(length = as.integer(length),
+         area = as.integer(area)) %>% 
+  ggplot(aes(age, length, fill = n)) +
+  geom_raster() +
+  facet_wrap(~ area)
+```
+
