@@ -1,32 +1,79 @@
-# Age-length data {#alk}
+# Age-length keys {#alk}
+
+```{r, warning = FALSE, message = FALSE}
+library(viridis)
+library(lubridate)
+library(stringr)
+library(tidyverse)
+```
+
+```{r}
+load("data/nsibts_tidy.rda")
+```
 
 ```{r, message = FALSE, warning = FALSE}
-d <- 
-  NSIBTS$ag %>% 
-  unite(id, year, quarter, ship, gear, haulno) %>% 
-  # turn everything to cm
-  mutate(length = ifelse(!lngtcode %in% c("1"), lngtclass / 10, lngtclass), 
-         indwgt = ifelse(indwgt <= 0, NA, indwgt)) %>% 
-  left_join(sp) %>% 
-  filter(latin == "Gadus morhua")
+d <- nsibts_tidy$AG %>% filter(latin == "Gadus morhua")
 d %>% 
-  ggplot(aes(length, indwgt)) +
+  ggplot(aes(length, wgt)) +
   geom_point(size = 0.25)
+d %>% 
+  group_by(id) %>% 
+  summarise(n = n()) %>% 
+  ggplot(aes(n)) + 
+  geom_histogram(binwidth = 1) +
+  scale_y_log10(breaks = c(1, 2, 4, 8, 16, 64, 250, 1000))
+d %>% filter(age <= 9) %>% ggplot(aes(length)) + geom_histogram()
+d %>% 
+  filter(age <= 9) %>% 
+  ggplot(aes(length, colour = factor(age))) + 
+  geom_freqpoly() +
+  scale_color_brewer(palette = "Set1")
+d %>% 
+  filter(age <= 8) %>% 
+  ggplot(aes(length)) +
+  theme_bw() +
+  geom_histogram(binwidth = 5) +
+  scale_color_brewer(palette = "Set1") +
+  scale_y_continuous(NULL, NULL) +
+  scale_x_continuous(breaks = seq(0, 150, by = 25)) +
+  coord_flip() +
+  facet_grid(. ~ age, scale = "free_x")
 
-# here ignore year and quarter
+# here ignore year, quarter and area
 alk <- 
   d %>% 
-  # get round fish area
-  left_join(ST %>% select(id, area)) %>% 
-  group_by(area, latin, age, length) %>% 
-  summarise(n = sum(noatalk)) %>% 
+  filter(!is.na(age)) %>% 
+  # get round fish area - not needed at this stage
+  left_join(nsibts_tidy$ST %>% select(id, area)) %>% 
+  # round length to the neares length class
+  #   ?? should one use floor here?
+  mutate(length = as.integer(round(length, 0))) %>% 
+  group_by(latin, age, length) %>% 
+  # not sure if i am supposed to summarise the noatalk
+  #  or just count the line, here count the lines
+  summarise(n = n()) %>% 
   ungroup()
-library(viridis)
+# probability that a certain length class is of certain age
+alk <- 
+  alk %>% 
+  group_by(length) %>% 
+  mutate(p = n/sum(n, na.rm = TRUE))  %>% 
+  ungroup()
 alk %>% 
-  mutate(length = as.integer(length),
-         area = as.integer(area)) %>% 
-  ggplot(aes(age, length, fill = n)) +
+  mutate(p = round(p, 2)) %>% 
+  select(age, length, p) %>% 
+  spread(age, p) %>% 
+  as.data.frame()
+# visualise
+alk %>% 
+  ggplot(aes(age, length, fill = p)) +
   geom_raster() +
-  facet_wrap(~ area)
+  scale_fill_viridis(direction = -1)
+alk %>% 
+  filter(length %in% c(40, 45, 50, 55, 60)) %>% 
+  ggplot(aes(age, p)) +
+  geom_point() +
+  geom_line() +
+  facet_grid(length ~ .)
 ```
 

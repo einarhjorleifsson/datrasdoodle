@@ -1,5 +1,17 @@
 # Length data {#length}
 
+```{r, warning = FALSE, message = FALSE}
+library(leaflet)
+library(lubridate)
+library(stringr)
+library(tidyverse)
+```
+
+
+```{r}
+load("data/nsibts_tidy.rda")
+```
+
 ## Data processing
 
 ### Load needed data
@@ -8,69 +20,23 @@
 * Read in table containing latin name, code type (T or W) and the corresponding code:
 
 
-### Tidy up the length data
-
-Processing:
-
-* Only distinct records (they are all distinct)
-* Filter out data were species code, length-code and length-class are undefined
-* Set lengths to millimeter. In the raw records:
-    - If **lngtcode** is "1" then the **lngtclass** is in centimeters
-    - If **lngtcode** is "." or "0" then the **lngclass** is in millimeters
-* Standardise the **haul numbers at length**. In the raw data:
-    - If **datatype** in the station table is "C" then **hlnoatlngt** has been standardized to 60 minutes haul
-    - If **datatype** in the station table is "R" then **hlnoatlngt** has not been standardized to 60 minutes haul
-* Get the latin species name from the `sp`-table
-* Select only variable that are needed in further processing
-    
-```{r}
-# read in species code
-sp <- read_csv("data-raw/SPCODE.csv")
-glimpse(sp)
-
-LE <-
-  NSIBTS$le %>%
-  distinct() %>%
-  filter(!is.na(speccode), !is.na(lngtclass), !is.na(lngtcode)) %>%
-  # EINAR - not sure if this is right, done here to test if any difference
-  #         (did though not help with respect to discrepancy here below)
-  filter(specval == 1) %>% 
-  unite(id, year, quarter, ship, gear, haulno) %>%
-  # only stations that are in the station table (north sea area)
-  filter(id %in% ST$id) %>% 
-  # length class to mm
-  mutate(length = ifelse(lngtcode %in% c("1"), lngtclass * 10, lngtclass),
-         hlnoatlngt = hlnoatlngt * subfactor) %>% 
-  # get the data type and hauldur
-  left_join(ST %>% select(id, datatype, hauldur)) %>% 
-  # catch per hour
-  mutate(n = ifelse(datatype == "R",
-                    hlnoatlngt * 60 / hauldur,
-                    hlnoatlngt)) %>% 
-  # join with latin name
-  left_join(sp) %>%
-  # select only needed columns
-  select(id, latin, sex, length, n)
-```
-
 ## CPUE by length class
 
 ### By each tow
 
 Since we are here ignoring sex in the analysis, we tally up the data by length class. This also tallies up the subfactor data:
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 # tally up by sex
 le <-
-  LE %>%
+  nsibts_tidy$LE %>%
   group_by(id, latin, length) %>%
   summarise(n = sum(n)) %>%
   ungroup()
 ```
 
-
 Limit the species in the analysis to "common" species (this step is not really necessary):
-```{r}
+```{r, message = FALSE, warning = FALSE}
 common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
             "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
             "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
@@ -83,7 +49,7 @@ glimpse(le)
 
 #### Merging the station table and the length table
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 st <- 
   # Fill "a station table" for each species:
   expand.grid(id = unique(ST$id),
@@ -91,8 +57,9 @@ st <-
               stringsAsFactors = FALSE) %>% 
   tbl_df()
 # stations with "missing species"
-# "return all rows from st where there are not matching values in length, keeping just columns from st."
-x <- 
+# "return all rows from st where there are not matching values in length,
+#    keeping just columns from st."
+st.zero <- 
   anti_join(st, le %>% select(id, latin) %>% distinct()) %>% 
   # fill with remainder of variables
   left_join(ST) %>% 
@@ -103,14 +70,14 @@ cpue <-
   ST %>%
   left_join(le) %>% 
   # add the zero stations
-  bind_rows(x) %>% 
+  bind_rows(st.zero) %>% 
   filter(!is.na(latin),
          year < 2017)
 ```
 
 ### Some simple summaries
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 cpue %>% 
   group_by(id, latin) %>% 
   summarise(n = sum(n)) %>%
@@ -130,7 +97,7 @@ cpue %>%
 ```
 
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 d <-
   cpue %>%
   group_by(year, quarter, latin, length) %>% 
@@ -158,7 +125,7 @@ d %>%
 ```
 
 __Mean by subarea__:
-```{r}
+```{r, message = FALSE, warning = FALSE}
 le_cm <-
   le %>% 
   mutate(length = length/10)
@@ -180,7 +147,7 @@ d <-
 
 ```{r, eval = FALSE, echo = FALSE}
 # a comparions with datras product
-d2 <- read_csv("data-raw/CPUE per length per subarea_2017-06-21 13_15_57.csv")
+d2 <- read_csv("data-raw/CPUE_per_length_per_subarea.csv")
 colnames(d2) <- tolower(colnames(d2))
 d2 <-
   d2 %>% 
@@ -205,7 +172,7 @@ d3 %>%
 
 __Mean by area__:
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 #d.stored <- d
 d <- 
   d %>% 
@@ -214,7 +181,7 @@ d <-
   ungroup()
 ```
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 d %>% 
   filter(year == 2017,
          quarter == 1, 
@@ -225,7 +192,7 @@ d %>%
   scale_colour_brewer(palette = "Set3")
 ```
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 d %>% 
   group_by(year, quarter, area) %>% 
   summarise(n = sum(n)) %>%
@@ -266,7 +233,7 @@ d %>%
 
 ```{r echo = FALSE, eval = FALSE}
 # comparison with datras product
-d2 <- read_csv("data-raw/CPUE per length per area_2017-06-21 13_17_49.csv")
+d2 <- read_csv("data-raw/CPUE_per_length_area.csv")
 colnames(d2) <- tolower(colnames(d2))
 d2 <-
   d2 %>% 
@@ -292,11 +259,13 @@ d3 %>%
 
 ## Comparison Datras service product
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
+fi <- 
+  "~/prj2/bookdown/datrasdoodle/data-raw/CPUE_per_length_per_haul.csv"
 cpue.datras.service.product <-
-  read_csv("~/prj2/bookdown/datrasdoodle/data-raw/CPUE per length per haul_2017-06-21 09_36_43.csv", na = "-9")
-colnames(cpue.datras.service.product) <- tolower(colnames(cpue.datras.service.product))
-#cpue.datras.service.product %>% filter(ship == "58G2") %>% select(survey:haulno, subarea)
+  read_csv(fi, na = "-9")
+colnames(cpue.datras.service.product) <- 
+  tolower(colnames(cpue.datras.service.product))
 cpue.datras.service.product <-
   cpue.datras.service.product %>%
   unite(id, year, quarter, ship, gear, haulno, remove = FALSE) %>% 
@@ -320,11 +289,13 @@ We have 516950 records that are OK. We have 1668 values that are "NA" meaning th
 
 Lets see what difference there is in the overview:
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
+fi <- 
+  "~/prj2/bookdown/datrasdoodle/data-raw/CPUE_per_length_per_haul.csv"
 cpue.datras.service.product <-
-  read_csv("~/prj2/bookdown/datrasdoodle/data-raw/CPUE per length per haul_2017-06-21 09_36_43.csv", na = "-9")
-colnames(cpue.datras.service.product) <- tolower(colnames(cpue.datras.service.product))
-#cpue.datras.service.product %>% filter(ship == "58G2") %>% select(survey:haulno, subarea)
+  read_csv(fi, na = "-9")
+colnames(cpue.datras.service.product) <- 
+  tolower(colnames(cpue.datras.service.product))
 cpue.datras.service.product <-
   cpue.datras.service.product %>%
   unite(id, year, quarter, ship, gear, haulno, remove = FALSE) %>% 
@@ -356,7 +327,7 @@ So overall, the difference is minor.
 
 **List of records that are different**:
 
-```{r}
+```{r, message = FALSE, warning = FALSE}
 diff %>% filter(is.na(diff) | diff) %>% knitr::kable()
 ```
 

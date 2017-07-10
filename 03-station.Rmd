@@ -1,32 +1,21 @@
 # Station data {#station}
 
+
 ```{r, warning = FALSE, message = FALSE}
+library(leaflet)
 library(lubridate)
 library(stringr)
 library(tidyverse)
 ```
 
+
 ```{r}
-attach("data/NSIBTS.rda")
-ns_area <- rgdal::readOGR("data-raw/NS_IBTS_RF.dbf")
+load("data/nsibts_tidy.rda")
+ST <- nsibts_tidy$ST
 ```
 
-### Tidy up the station data
-
-<!-- Need to explain the area stuff -->
-
-Here select only valid hauls and needed variables:
 ```{r}
-ST <-
-  NSIBTS$st %>%
-  # only valid hauls
-  filter(haulval == "V") %>% 
-  select(id, survey, year, quarter, ship, gear, haulno, hauldur,
-         shootlat, shootlong, datetime, depth, 
-         subarea = statrec, daynight, datatype)
-# get the area
-ST <-
-  ST %>% 
-  mutate(area = gisland::geo_inside(shootlong, shootlat, ns_area, "AreaName")) %>% 
-  filter(!is.na(area))
+leaflet() %>% 
+  addTiles()
 ```
+
