@@ -12,9 +12,9 @@ Download the raw data using the `getDATRAS` function from the [icesDatras](https
 
 ```{r, eval = FALSE}
 # not run
-st <- icesDatras::getDATRAS("HH", "NS-IBTS", 2005:2017, c(1, 2, 3, 4))
-le <- icesDatras::getDATRAS("HL", "NS-IBTS", 2005:2017, c(1, 2, 3, 4))
-ag <- icesDatras::getDATRAS("CA", "NS-IBTS", 2005:2017, c(1, 2, 3, 4))
+st <- icesDatras::getDATRAS("HH", "NS-IBTS", 1975:2017, 1)
+le <- icesDatras::getDATRAS("HL", "NS-IBTS", 1975:2017, 1)
+ag <- icesDatras::getDATRAS("CA", "NS-IBTS", 1975:2017, 1)
 
 nsibts_raw <- list(st = st, le = le, ag = ag)
 save(nsibts_raw, file = "data/nsibts_raw.rda")

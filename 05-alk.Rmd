@@ -12,6 +12,8 @@ library(tidyverse)
 load("data/nsibts_tidy.rda")
 ```
 
+## Quick overview
+
 ```{r, message = FALSE, warning = FALSE}
 d <- nsibts_tidy$AG %>% filter(latin == "Gadus morhua")
 # here ignore year, quarter and area
@@ -60,7 +62,8 @@ alk %>%
   facet_grid(length ~ .)
 ```
 
-Lets look at one year, one quarter
+## Year, quarter, species
+
 ```{r}
 id_separate <- function(d) {
   d %>% 
@@ -71,33 +74,55 @@ id_unite<- function(d) {
   d %>% 
     unite(id, year, quarter, ship, gear, haulno)
 }
-
+common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
+            "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
+            "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
 alk <- 
-  d %>% 
-  id_separate() %>% 
-  filter(year == 2016, quarter == 1, !is.na(age)) %>% 
-  id_unite()  %>% 
-  # get round fish area
+  nsibts_tidy$AG %>% 
+  filter(!is.na(age)) %>% 
+  # get round fish area - actually ignored here
   left_join(nsibts_tidy$ST %>% select(id, area)) %>% 
   filter(!is.na(area)) %>% 
+  id_separate() %>% 
+  as_tibble() %>% 
   # round length to the neares length class
   #   ?? should one use floor here?
   mutate(length = as.integer(round(length, 0))) %>% 
-  group_by(latin, area, age, length) %>% 
+  group_by(year, quarter, latin, age, length) %>% 
   # not sure if i am supposed to summarise the noatalk
   #  or just count the line, here count the lines
   summarise(n = n()) %>% 
   ungroup() %>%
-  group_by(latin, area, length) %>% 
+  group_by(year, quarter, latin, length) %>% 
   mutate(p = n/sum(n, na.rm = TRUE))  %>% 
-  ungroup()
-alk %>% 
-  ggplot(aes(length, p, fill = factor(age))) + 
-  geom_col() + 
-  scale_fill_crayola(name = "Age") +
-  scale_x_continuous("Length [cm]", breaks = seq(0, 150, by = 10)) +
-  scale_y_continuous("Probability", breaks = seq(0, 1, by = 0.1)) +
-  facet_wrap(~ area)
+  ungroup() %>% 
+  filter(latin %in% common)
+source("R/functions/cpue_per_length_per_haul.R")
+le <- 
+  cpue_per_length_per_haul(st = nsibts_tidy$ST, le = nsibts_tidy$LE) %>% 
+  group_by(year, quarter, latin, length) %>% 
+  summarise(n = sum(n)) %>% 
+  filter(latin %in% common)
+
+x <-
+  alk %>%
+  select(-n) %>% 
+  left_join(le %>% mutate(length = length/10)) %>% 
+  group_by(year, quarter, latin, age) %>% 
+  summarise(n = sum(p * n, na.rm = TRUE))
+library(ggmisc)
+x %>% 
+  filter(latin == "Melanogrammus aeglefinus",
+         quarter == 1,
+         age %in% 1:10) %>% 
+  mutate(yc = year - age) %>% 
+  ggplot(aes(year, n, fill = factor(yc))) +
+  geom_col() +
+  facet_grid(age ~ ., scale = "free_y") +
+  scale_fill_crayola() +
+  theme(legend.position = "none") +
+  scale_y_continuous(NULL, NULL) +
+  labs(x = NULL)
 ```
 
 

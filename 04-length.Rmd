@@ -5,11 +5,13 @@ library(leaflet)
 library(lubridate)
 library(stringr)
 library(tidyverse)
+library(ggjoy)
 ```
 
 
 ```{r}
 load("data/nsibts_tidy.rda")
+ST <- nsibts_tidy$ST
 ```
 
 ## Data processing
@@ -23,6 +25,54 @@ load("data/nsibts_tidy.rda")
 ## CPUE by length class
 
 ### By each tow
+
+```{r}
+cpue_per_length_per_haul <- function(st, le, source = "tidy") {
+  
+  if(source != "tidy") {
+    stop("Not implemented yet")
+  }
+
+  # tally up by sex
+  le <-
+    le %>%
+    group_by(id, latin, length) %>%
+    summarise(n = sum(n)) %>%
+    ungroup()
+  st.grid <- 
+    # Fill "a station table" for each species:
+    expand.grid(id = unique(st$id),
+                latin = unique(le$latin),
+                stringsAsFactors = FALSE) %>% 
+    tbl_df()
+  # stations with "missing species"
+  # "return all rows from st where there are not matching values in length,
+  #    keeping just columns from st."
+  st.zero <- 
+    anti_join(st.grid, le %>% select(id, latin) %>% distinct()) %>% 
+    # fill with remainder of variables
+    left_join(st) %>% 
+    # create a zero record
+    mutate(length = 0,
+           n = 0)
+  cpue <-
+    st %>%
+    left_join(le) %>% 
+    # add the zero stations
+    bind_rows(st.zero) %>% 
+    filter(!is.na(latin))
+  
+  return(cpue)
+}
+cpue2 <- cpue_per_length_per_haul(st = nsibts_tidy$ST, le = nsibts_tidy$LE)
+common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
+            "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
+            "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
+cpue2 <- 
+  cpue2 %>% 
+  filter(latin %in% common)
+```
+
 
 Since we are here ignoring sex in the analysis, we tally up the data by length class. This also tallies up the subfactor data:
 
@@ -59,6 +109,7 @@ st <-
 # stations with "missing species"
 # "return all rows from st where there are not matching values in length,
 #    keeping just columns from st."
+
 st.zero <- 
   anti_join(st, le %>% select(id, latin) %>% distinct()) %>% 
   # fill with remainder of variables
@@ -71,8 +122,9 @@ cpue <-
   left_join(le) %>% 
   # add the zero stations
   bind_rows(st.zero) %>% 
-  filter(!is.na(latin),
-         year < 2017)
+  filter(!is.na(latin))
+
+cpue <- cpue2
 ```
 
 ### Some simple summaries
@@ -93,7 +145,7 @@ cpue %>%
        colour = "Quarter",
        title = "Annual abundance",
        subtitle = "Bootstrap mean and confidence interval of individual tows") +
-  scale_x_continuous(breaks = seq(2005,2015,5))
+  scale_x_continuous(breaks = seq(2000, 2020, 5))
 ```
 
 
@@ -107,21 +159,18 @@ d <-
 d %>%
     filter(latin == "Melanogrammus aeglefinus",
          quarter == 1) %>% 
-  ggplot(aes(length, n)) +
-  geom_line() +
-  facet_grid(year ~ .)
+  ggplot(aes(length,  as.factor(year), group = year, height = n)) +
+  geom_joy(stat = "identity")
 d %>%
     filter(latin == "Gadus morhua",
          quarter == 1) %>% 
-  ggplot(aes(length, n)) +
-  geom_line() +
-  facet_grid(year ~ .)
+  ggplot(aes(length,  as.factor(year), height = n)) +
+  geom_joy(stat = "identity")
 d %>%
     filter(latin == "Pleuronectes platessa",
          quarter == 1) %>% 
-  ggplot(aes(length, n)) +
-  geom_line() +
-  facet_grid(year ~ .)
+  ggplot(aes(length, as.factor(year), height = n)) +
+  geom_joy(stat = "identity", alpha = 0.5)
 ```
 
 __Mean by subarea__:
@@ -156,7 +205,7 @@ d2 <-
   mutate(length = length/10)
 d3 <-
   d %>% 
-  left_join(d3) %>% 
+  left_join(d2) %>% 
   mutate(n.datras = ifelse(is.na(n.datras), 0, n.datras))
 d3 %>% 
   mutate(n = round(n, 3)) %>% 
@@ -273,7 +322,7 @@ cpue.datras.service.product <-
 
 diff <-
   cpue %>%
-  filter(year < 2017) %>% 
+  filter(year >= 2005) %>% 
   select(id, latin, length, cpue.tidy = n) %>% 
   full_join(cpue.datras.service.product) %>%
   mutate(diff = !near(cpue.dsp, cpue.tidy, tol = 1e-4),
@@ -285,7 +334,7 @@ diff %>%
   knitr::kable()
 ```
 
-We have 516950 records that are OK. We have 1668 values that are "NA" meaning that either of the cpue or both were missing. And then 953 records that are different.
+We have 542876 records that are OK. We have 1794 values that are "NA" meaning that either of the cpue or both were missing. And then 965 records that are different.
 
 Lets see what difference there is in the overview:
 
@@ -325,10 +374,39 @@ d %>%
 
 So overall, the difference is minor.
 
+**Number of records by species**:
+
+```{r}
+diff %>% 
+  filter(diff |is.na(diff)) %>% 
+  group_by(diff, latin) %>% 
+  summarise(n = n()) %>% 
+  as.data.frame() %>% 
+  spread(diff, n, fill = 0)
+```
+
+**Lets look at one case**:
+```{r}
+nsibts_tidy$LE %>% 
+  filter(id == "2009_1_THA2_GOV_26",
+         latin == "Melanogrammus aeglefinus")
+cpue.datras.service.product %>% 
+  filter(id == "2009_1_THA2_GOV_26",
+         latin == "Melanogrammus aeglefinus")
+attach("data/nsibts_raw.rda")
+nsibts_raw$le %>% 
+  unite(id, Year, Quarter, Ship, Gear, HaulNo) %>% 
+  filter(id == "2009_1_THA2_GOV_26",
+         SpecCode == 164744) %>% 
+  select(id, TotalNo, LngtCode, LngtClass, HLNoAtLngt)
+```
+
+So, looks like an issue with interpretation of `LngtCode`.
+
 **List of records that are different**:
 
 ```{r, message = FALSE, warning = FALSE}
-diff %>% filter(is.na(diff) | diff) %>% knitr::kable()
+diff %>% filter(diff) %>% select(id:cpue.dsp) %>% as.data.frame()
 ```
 
 

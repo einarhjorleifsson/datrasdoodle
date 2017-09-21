@@ -6,7 +6,7 @@ a little test in editing directly on github ...
 
 ```{r, message = FALSE}
 sf::st_read("data-raw/NS_IBTS_RF.dbf", quiet = TRUE) %>% 
-  mutate(AreaName = as.integer(AreaName)) %>% 
+  # mutate(AreaName = as.integer(AreaName)) %>% #reulst in an error
   ggplot() +
   theme_bw() +
   geom_sf(aes(fill = factor(AreaName))) +
