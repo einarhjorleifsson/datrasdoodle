@@ -5,6 +5,7 @@ library(ggmisc)
 library(viridis)
 library(lubridate)
 library(stringr)
+library(tidyices)
 library(tidyverse)
 ```
 
@@ -15,13 +16,13 @@ load("data/nsibts_tidy.rda")
 ## Quick overview
 
 ```{r, message = FALSE, warning = FALSE}
-d <- nsibts_tidy$AG %>% filter(latin == "Gadus morhua")
+d <- nsibts_tidy$ca %>% filter(latin == "Gadus morhua")
 # here ignore year, quarter and area
 alk <- 
   d %>% 
   filter(!is.na(age)) %>% 
   # get round fish area - not needed at this stage
-  left_join(nsibts_tidy$ST %>% select(id, area)) %>% 
+  left_join(nsibts_tidy$hh %>% select(id, area)) %>% 
   # round length to the neares length class
   #   ?? should one use floor here?
   mutate(length = as.integer(round(length, 0))) %>% 
@@ -46,7 +47,7 @@ alk %>%
   scale_fill_crayola(name = "Age") +
   scale_x_continuous("Length [cm]", breaks = seq(0, 150, by = 10)) +
   scale_y_continuous("Probability", breaks = seq(0, 1, by = 0.1))
-nsibts_tidy$LE %>% 
+nsibts_tidy$hl %>% 
   filter(latin == "Gadus morhua") %>% 
   mutate(length = round(length/10, 0)) %>% 
   group_by(length) %>% 
@@ -65,23 +66,14 @@ alk %>%
 ## Year, quarter, species
 
 ```{r}
-id_separate <- function(d) {
-  d %>% 
-    separate(id, c("year", "quarter", "ship", "gear", "haulno"),
-             convert = TRUE)
-}
-id_unite<- function(d) {
-  d %>% 
-    unite(id, year, quarter, ship, gear, haulno)
-}
 common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
             "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
             "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
 alk <- 
-  nsibts_tidy$AG %>% 
+  nsibts_tidy$ca %>% 
   filter(!is.na(age)) %>% 
   # get round fish area - actually ignored here
-  left_join(nsibts_tidy$ST %>% select(id, area)) %>% 
+  left_join(nsibts_tidy$hh %>% select(id, area)) %>% 
   filter(!is.na(area)) %>% 
   id_separate() %>% 
   as_tibble() %>% 
@@ -97,13 +89,12 @@ alk <-
   mutate(p = n/sum(n, na.rm = TRUE))  %>% 
   ungroup() %>% 
   filter(latin %in% common)
-source("R/functions/cpue_per_length_per_haul.R")
 le <- 
-  cpue_per_length_per_haul(st = nsibts_tidy$ST, le = nsibts_tidy$LE) %>% 
+  cpue_per_length_per_haul(st = nsibts_tidy$hh, le = nsibts_tidy$hl) %>% 
+  id_separate() %>% 
   group_by(year, quarter, latin, length) %>% 
   summarise(n = sum(n)) %>% 
   filter(latin %in% common)
-
 x <-
   alk %>%
   select(-n) %>% 

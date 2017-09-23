@@ -1,9 +1,9 @@
 # Length data {#length}
 
 ```{r, warning = FALSE, message = FALSE}
-library(leaflet)
 library(lubridate)
 library(stringr)
+library(tidyices)
 library(tidyverse)
 library(ggjoy)
 ```
@@ -11,304 +11,34 @@ library(ggjoy)
 
 ```{r}
 load("data/nsibts_tidy.rda")
-ST <- nsibts_tidy$ST
 ```
 
-## Data processing
-
-### Load needed data
-
-* Load the DATRAS raw data previously imported
-* Read in table containing latin name, code type (T or W) and the corresponding code:
-
-
-## CPUE by length class
-
-### By each tow
+## CPUE per length per haul
+___
 
 ```{r}
-cpue_per_length_per_haul <- function(st, le, source = "tidy") {
-  
-  if(source != "tidy") {
-    stop("Not implemented yet")
-  }
-
-  # tally up by sex
-  le <-
-    le %>%
-    group_by(id, latin, length) %>%
-    summarise(n = sum(n)) %>%
-    ungroup()
-  st.grid <- 
-    # Fill "a station table" for each species:
-    expand.grid(id = unique(st$id),
-                latin = unique(le$latin),
-                stringsAsFactors = FALSE) %>% 
-    tbl_df()
-  # stations with "missing species"
-  # "return all rows from st where there are not matching values in length,
-  #    keeping just columns from st."
-  st.zero <- 
-    anti_join(st.grid, le %>% select(id, latin) %>% distinct()) %>% 
-    # fill with remainder of variables
-    left_join(st) %>% 
-    # create a zero record
-    mutate(length = 0,
-           n = 0)
-  cpue <-
-    st %>%
-    left_join(le) %>% 
-    # add the zero stations
-    bind_rows(st.zero) %>% 
-    filter(!is.na(latin))
-  
-  return(cpue)
-}
-cpue2 <- cpue_per_length_per_haul(st = nsibts_tidy$ST, le = nsibts_tidy$LE)
 common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
             "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
             "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
-cpue2 <- 
-  cpue2 %>% 
-  filter(latin %in% common)
+cpue <- 
+  #                        only valid hauls
+  cpue_per_length_per_haul(st = nsibts_tidy$hh %>% filter(haulval == "V",
+                                                          !is.na(area)),
+                           le = nsibts_tidy$hl) %>% 
+  filter(latin %in% common) %>% 
+  # debugging, this should be fixed upstream
+  filter(!is.na(length))
 ```
 
-
-Since we are here ignoring sex in the analysis, we tally up the data by length class. This also tallies up the subfactor data:
-
-```{r, message = FALSE, warning = FALSE}
-# tally up by sex
-le <-
-  nsibts_tidy$LE %>%
-  group_by(id, latin, length) %>%
-  summarise(n = sum(n)) %>%
-  ungroup()
-```
-
-Limit the species in the analysis to "common" species (this step is not really necessary):
-```{r, message = FALSE, warning = FALSE}
-common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
-            "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
-            "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
-le <-
-  le %>%
-  # only common species
-  filter(latin %in% common)
-glimpse(le)
-```
-
-#### Merging the station table and the length table
+#### Comparison Datras service product
 
 ```{r, message = FALSE, warning = FALSE}
-st <- 
-  # Fill "a station table" for each species:
-  expand.grid(id = unique(ST$id),
-              latin = common,
-              stringsAsFactors = FALSE) %>% 
-  tbl_df()
-# stations with "missing species"
-# "return all rows from st where there are not matching values in length,
-#    keeping just columns from st."
-
-st.zero <- 
-  anti_join(st, le %>% select(id, latin) %>% distinct()) %>% 
-  # fill with remainder of variables
-  left_join(ST) %>% 
-  # create a zero record
-  mutate(length = 0,
-         n = 0)
-cpue <-
-  ST %>%
-  left_join(le) %>% 
-  # add the zero stations
-  bind_rows(st.zero) %>% 
-  filter(!is.na(latin))
-
-cpue <- cpue2
-```
-
-### Some simple summaries
-
-```{r, message = FALSE, warning = FALSE}
-cpue %>% 
-  group_by(id, latin) %>% 
-  summarise(n = sum(n)) %>%
-  separate(id, c("year", "quarter", "ship", "gear", "haulno"), convert = TRUE) %>%
-  filter(quarter %in% c(1, 3)) %>% 
-  mutate(year = year + quarter/4) %>% 
-  ggplot(aes(year, n, colour = factor(quarter))) +
-  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
-  expand_limits(y = 0) +
-  facet_wrap(~ latin, scale = "free_y") +
-  scale_color_brewer(palette = "Set1") +
-  labs(x = NULL, y = NULL,
-       colour = "Quarter",
-       title = "Annual abundance",
-       subtitle = "Bootstrap mean and confidence interval of individual tows") +
-  scale_x_continuous(breaks = seq(2000, 2020, 5))
-```
-
-
-```{r, message = FALSE, warning = FALSE}
-d <-
+cpue2 <-
   cpue %>%
-  group_by(year, quarter, latin, length) %>% 
-  summarise(n = sum(n)/1e3) %>% 
-  mutate(length = length/10) %>% 
-  ungroup()
-d %>%
-    filter(latin == "Melanogrammus aeglefinus",
-         quarter == 1) %>% 
-  ggplot(aes(length,  as.factor(year), group = year, height = n)) +
-  geom_joy(stat = "identity")
-d %>%
-    filter(latin == "Gadus morhua",
-         quarter == 1) %>% 
-  ggplot(aes(length,  as.factor(year), height = n)) +
-  geom_joy(stat = "identity")
-d %>%
-    filter(latin == "Pleuronectes platessa",
-         quarter == 1) %>% 
-  ggplot(aes(length, as.factor(year), height = n)) +
-  geom_joy(stat = "identity", alpha = 0.5)
-```
-
-__Mean by subarea__:
-```{r, message = FALSE, warning = FALSE}
-le_cm <-
-  le %>% 
-  mutate(length = length/10)
-gr <- 
-  expand.grid(id = ST$id,
-              length = 0:200,
-              stringsAsFactors = FALSE)
-d <- 
-  gr %>% 
-  left_join(ST %>% select(id, area, subarea)) %>% 
-  left_join(le_cm %>% filter(latin == "Gadus morhua")) %>% 
-  mutate(n = ifelse(is.na(n), 0, n)) %>% 
-  select(-latin) %>% 
-  separate(id, c("year", "quarter", "ship", "gear", "haulno"), convert = TRUE) %>% 
-  group_by(year, quarter, area, subarea, length) %>% 
-  summarise(n = mean(n)) %>% 
-  ungroup()
-```
-
-```{r, eval = FALSE, echo = FALSE}
-# a comparions with datras product
-d2 <- read_csv("data-raw/CPUE_per_length_per_subarea.csv")
-colnames(d2) <- tolower(colnames(d2))
-d2 <-
-  d2 %>% 
-  filter(species == "Gadus morhua") %>% 
-  select(year, quarter, subarea, length = lngtclass, n.datras = cpue_number_per_hour) %>% 
-  mutate(length = length/10)
-d3 <-
-  d %>% 
-  left_join(d2) %>% 
-  mutate(n.datras = ifelse(is.na(n.datras), 0, n.datras))
-d3 %>% 
-  mutate(n = round(n, 3)) %>% 
-  filter(n != n.datras) %>% 
-  ggplot(aes(n, n.datras)) +
-  geom_point()
-d3 %>% 
-  mutate(n = round(n, 3)) %>% 
-  filter(n != n.datras) %>% 
-  ggplot(aes(n - n.datras)) +
-  geom_histogram()
-```
-
-__Mean by area__:
-
-```{r, message = FALSE, warning = FALSE}
-#d.stored <- d
-d <- 
-  d %>% 
-  group_by(year, quarter, area, length) %>% 
-  summarise(n = mean(n)) %>% 
-  ungroup()
-```
-
-```{r, message = FALSE, warning = FALSE}
-d %>% 
-  filter(year == 2017,
-         quarter == 1, 
-         length <= 110) %>% 
-  mutate(area = as.integer(area)) %>% 
-  ggplot(aes(length, n, colour = factor(area))) +
-  geom_line(lwd=1) +
-  scale_colour_brewer(palette = "Set3")
-```
-
-```{r, message = FALSE, warning = FALSE}
-d %>% 
-  group_by(year, quarter, area) %>% 
-  summarise(n = sum(n)) %>%
-  ungroup() %>% 
-  filter(quarter %in% c(1, 3)) %>% 
-  mutate(area = as.integer(area),
-         year = year + quarter/4) %>% 
-  ggplot(aes(year, n, colour = factor(quarter))) +
-  geom_point() +
-  geom_line() +
-  expand_limits(y = 0) +
-  facet_wrap(~ area, scale = "free_y") +
-  scale_color_brewer(palette = "Set1") +
-  labs(x = NULL, y = NULL,
-       colour = "Quarter",
-       title = "Annual mean abundance",
-       subtitle = "Mean based on cpue by area") +
-  scale_x_continuous(breaks = seq(2005,2015,5))
-
-
-d %>% 
-  group_by(year, quarter, area) %>% 
-  # sum all length data
-  summarise(n = sum(n)) %>%
-  ungroup() %>% 
-  filter(quarter %in% c(1, 3)) %>% 
-  mutate(year = year + quarter/4) %>% 
-  ggplot(aes(year, n, colour = factor(quarter))) +
-  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
-  expand_limits(y = 0) +
-  scale_color_brewer(palette = "Set1") +
-  labs(x = NULL, y = NULL,
-       colour = "Quarter",
-       title = "Annual abundance",
-       subtitle = "Bootstrap mean and confidence interval of data by area") +
-  scale_x_continuous(breaks = seq(2005,2015,5))
-```
-
-```{r echo = FALSE, eval = FALSE}
-# comparison with datras product
-d2 <- read_csv("data-raw/CPUE_per_length_area.csv")
-colnames(d2) <- tolower(colnames(d2))
-d2 <-
-  d2 %>% 
-  filter(species == "Gadus morhua") %>% 
-  select(year, quarter, area, length = lngtclass, n.datras = cpue_number_per_hour) %>% 
-  mutate(length = length/10)
-d3 <-
-  d %>% 
-  left_join(d3) %>% 
-  mutate(n.datras = ifelse(is.na(n.datras), 0, n.datras))
-d3 %>% 
-  mutate(n = round(n, 3)) %>% 
-  filter(n != n.datras) %>% 
-  ggplot(aes(n, n.datras)) +
-  geom_point()
-d3 %>% 
-  mutate(n = round(n, 3)) %>% 
-  filter(n != n.datras) %>% 
-  ggplot(aes(n - n.datras)) +
-  geom_histogram()
-```
-
-
-## Comparison Datras service product
-
-```{r, message = FALSE, warning = FALSE}
+  id_separate(remove = FALSE) %>%
+  filter(year %in% 2005:2016) %>% 
+  select(id, latin, length, cpue.tidy = n) %>% 
+  mutate(length = as.integer(length * 10))
 fi <- 
   "~/prj2/bookdown/datrasdoodle/data-raw/CPUE_per_length_per_haul.csv"
 cpue.datras.service.product <-
@@ -317,13 +47,13 @@ colnames(cpue.datras.service.product) <-
   tolower(colnames(cpue.datras.service.product))
 cpue.datras.service.product <-
   cpue.datras.service.product %>%
-  unite(id, year, quarter, ship, gear, haulno, remove = FALSE) %>% 
-  select(id, latin = species, length = lngtclass, cpue.dsp = cpue_number_per_hour)
+  filter(year %in% 2005:2016) %>% 
+  id_unite() %>% 
+  select(id, latin = species, length = lngtclass, cpue.dsp = cpue_number_per_hour) %>% 
+  as_tibble()
 
 diff <-
-  cpue %>%
-  filter(year >= 2005) %>% 
-  select(id, latin, length, cpue.tidy = n) %>% 
+  cpue2 %>% 
   full_join(cpue.datras.service.product) %>%
   mutate(diff = !near(cpue.dsp, cpue.tidy, tol = 1e-4),
          txt = ifelse(!diff, "Same",
@@ -334,83 +64,125 @@ diff %>%
   knitr::kable()
 ```
 
-We have 542876 records that are OK. We have 1794 values that are "NA" meaning that either of the cpue or both were missing. And then 965 records that are different.
+We have 515584 records that are OK and then 953 records that are different. We have 1642 values that are "NA" meaning that either of the cpue or both were missing.
 
-Lets see what difference there is in the overview:
-
-```{r, message = FALSE, warning = FALSE}
-fi <- 
-  "~/prj2/bookdown/datrasdoodle/data-raw/CPUE_per_length_per_haul.csv"
-cpue.datras.service.product <-
-  read_csv(fi, na = "-9")
-colnames(cpue.datras.service.product) <- 
-  tolower(colnames(cpue.datras.service.product))
-cpue.datras.service.product <-
-  cpue.datras.service.product %>%
-  unite(id, year, quarter, ship, gear, haulno, remove = FALSE) %>% 
-  select(id, year, quarter, subarea, latin = species, length = lngtclass, n = cpue_number_per_hour) %>% 
-  mutate(source = "datras")
-cpue2 <- 
-  cpue %>% 
-  filter(!is.na(latin)) %>% 
-  select(id, year, quarter, subarea, latin, length, n) %>% 
-  mutate(source = "tidy")
-d <-
-  bind_rows(cpue.datras.service.product, cpue2) %>% 
-  group_by(source, year, quarter, latin, subarea) %>% 
-  summarise(n = mean(n)) %>% 
-  group_by(year, quarter, source, latin) %>% 
-  summarise(n = mean(n))
-d %>% 
-  filter(quarter %in% c(1, 3)) %>% 
-  mutate(split = paste(latin, quarter)) %>% 
-  ggplot(aes(year, n, colour = source)) +
-  geom_point() +
-  geom_line() +
-  facet_wrap(~ split, scale = "free_y") +
-  scale_color_brewer(palette = "Set1") +
-  theme(legend.position = c(0.8, 0.1))
+```{r}
+x <- diff %>% filter(is.na(txt))
+table(!is.na(x$cpue.tidy), !is.na(x$cpue.dsp))
 ```
 
-So overall, the difference is minor.
+So have 1374 observations that are in "tidy" but not in "dsp" and 268 observations in "dsp" that are not in "tidy"
 
-**Number of records by species**:
+**Lets print the 268 observations that are not in "tidy"**:
 
 ```{r}
 diff %>% 
-  filter(diff |is.na(diff)) %>% 
-  group_by(diff, latin) %>% 
-  summarise(n = n()) %>% 
-  as.data.frame() %>% 
-  spread(diff, n, fill = 0)
+  filter(is.na(txt), !is.na(cpue.dsp)) %>% 
+  arrange(latin) %>% 
+  knitr::kable()
 ```
 
-**Lets look at one case**:
+What is the story with the single haddock?:
 ```{r}
-nsibts_tidy$LE %>% 
+load("data/raw_data.rda")
+colnames(raw_hl) <- tolower(colnames(raw_hl))
+raw_hl %>% 
+  as_tibble() %>% 
+  id_unite() %>% 
   filter(id == "2009_1_THA2_GOV_26",
-         latin == "Melanogrammus aeglefinus")
+         valid_aphia == 126437) %>% glimpse()
+```
+
+So, it does not appear in the raw_hl dataframe. And because these are all of `lngtcode == "0"` these fish are what is termed as 0.5 cm length class, reporting units of millimeter. For the time being this does not quite make sense in my head.
+
+What do we have in tidy for the haul and species in question?:
+```{r}
+cpue2 %>% 
+  filter(id == "2009_1_THA2_GOV_26",
+         latin == "Melanogrammus aeglefinus") %>% glimpse()
+```
+
+So no 20 cm fish
+
+And in the dsp:
+```{r}
 cpue.datras.service.product %>% 
   filter(id == "2009_1_THA2_GOV_26",
-         latin == "Melanogrammus aeglefinus")
-attach("data/nsibts_raw.rda")
-nsibts_raw$le %>% 
-  unite(id, Year, Quarter, Ship, Gear, HaulNo) %>% 
-  filter(id == "2009_1_THA2_GOV_26",
-         SpecCode == 164744) %>% 
-  select(id, TotalNo, LngtCode, LngtClass, HLNoAtLngt)
+         latin == "Melanogrammus aeglefinus") %>% glimpse()
 ```
 
-So, looks like an issue with interpretation of `LngtCode`.
+We have only 20, 30 and 40 cm fish. So it seems like in the dsp the length class are treated as millimeters that are then converted to centimeters by rounding.
 
-**List of records that are different**:
+### Some simple summaries
 
 ```{r, message = FALSE, warning = FALSE}
-diff %>% filter(diff) %>% select(id:cpue.dsp) %>% as.data.frame()
+d <-
+  cpue %>% 
+  mutate(b = n * 0.01 * length^3) %>% 
+  group_by(id, latin) %>% 
+  summarise(n = sum(n),
+            b = sum(b)) %>%
+  separate(id, c("year", "quarter", "ship", "gear", "haulno"), convert = TRUE) %>%
+  mutate(year = year + quarter/4)
+
+d %>% 
+  ggplot(aes(year, n, colour = factor(quarter))) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
+  expand_limits(y = 0) +
+  facet_wrap(~ latin, scale = "free_y") +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = NULL, y = NULL,
+       colour = "Quarter",
+       title = "Annual abundance",
+       subtitle = "Bootstrap mean and confidence interval of individual tows")
+d %>% 
+  ggplot(aes(year, b, colour = factor(quarter))) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
+  expand_limits(y = 0) +
+  facet_wrap(~ latin, scale = "free_y") +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = NULL, y = NULL,
+       colour = "Quarter",
+       title = "Annual biomass",
+       subtitle = "Bootstrap mean and confidence interval of individual tows")
+```
+
+
+```{r, message = FALSE, warning = FALSE}
+d <-
+  cpue %>%
+  mutate(b = n * 0.01 * length^3) %>% 
+  id_separate() %>% 
+  group_by(year, quarter, latin, length) %>% 
+  summarise(n = sum(n),
+            b = sum(b)) %>% 
+  ungroup()
+d %>%
+  filter(latin == "Melanogrammus aeglefinus",
+         year >= 1998,
+         quarter == 1,
+         between(length, 9, 45)) %>% 
+  ggplot(aes(length,  as.factor(year), group = year, height = n)) +
+  geom_joy(stat = "identity", scale = 5, alpha = 0.5)
+d %>%
+  filter(latin == "Gadus morhua",
+         year >= 2000,
+         quarter == 1,
+         between(length, 5, 100)) %>% 
+  ggplot(aes(length,  as.factor(year), height = b)) +
+  geom_joy(stat = "identity", scale = 3, alpha = 0.5) +
+  scale_x_continuous(breaks = seq(0, 120, by = 10))
+d %>%
+  filter(latin == "Pleuronectes platessa",
+         year >= 2000,
+         quarter == 1) %>% 
+  ggplot(aes(length, as.factor(year), height = n)) +
+  geom_joy(stat = "identity", alpha = 0.5)
 ```
 
 
 ## Field names
+___
 
 * **StNo**: National coding system, not defined by ICES
 * **HaulNo**: Sequential numbering of hauls during cruise. In CA-records: HaulNo = -9 for Area-based ALK HaulNo <> -9 and > 0 for Haul-based ALK
