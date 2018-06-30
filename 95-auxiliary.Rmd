@@ -42,8 +42,9 @@ In the Datras data the species are encoded. There are three columns associated w
 
 Lets look at the 2 most common species in the length database by speccodetype:
 ```{r}
-load("data/NSIBTS.rda")
-NSIBTS$le %>% 
+load("data/nsibts_raw.rda")
+nsibts_raw$hl %>% 
+  rename_all(tolower) %>% 
   group_by(speccodetype, speccode, specval) %>% 
   summarise(n = n()) %>%
   arrange(desc(n)) %>% 
@@ -121,7 +122,8 @@ get_species <- function(speccodetype, speccode) {
 
 Does not work:
 ```{r}
-NSIBTS$le %>% 
+nsibts_raw$hl %>% 
+  rename_all(tolower) %>% 
   select(speccodetype, speccode, specval) %>% 
   distinct() %>% 
   slice(1:10) %>% 
@@ -131,6 +133,7 @@ NSIBTS$le %>%
 Instead of addressing the API each time one wants to find the latin name of a species it may be more conventient to generate a specific R dataframe that we store locally on the computer. Following is the code used to generate the species table: 
 
 ```{r, eval = FALSE}
+# Not run
 url <- "https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename=tsn&code=126438"
 out <- icesDatras:::readDatras(url)
 out <- icesDatras:::parseDatras(out)
@@ -202,56 +205,4 @@ for (i in 1:nrow(sp)) {
   sp$latin[i] <- get_species(sp$speccodetype[i], sp$speccode[i])
 }
 save(sp, file = "data/sp.rda")
-```
-
-```{r, echo = FALSE, eval = FALSE}
-# More abandoned trials
-library(datrasr)
-library(tidyverse)
-data(tsn)
-tsn <-
-  tsn %>%
-  rename(speccode = tsn,
-         latin = completename) %>% 
-  mutate(latin = as.character(latin),
-         speccode = as.character(speccode),
-         speccodetype = "T")
-worms <- 
-  read_csv("data-raw/AphiaID_List.csv") %>% 
-  rename(speccode = WoRMS_AphiaID_Valid,
-         latin = ScientificName_WoRMS) %>% 
-  mutate(speccode = ifelse(speccode == "NULL", NA_character_, speccode),
-         speccodetype = "W")
-
-SPCODE <-
-  bind_rows(tsn, worms) %>% 
-  distinct() %>% 
-  arrange(latin)
-write_csv(SPCODE, "data-raw/SPCODE.csv")
-sp <- "Gadus morhua"
-SPCODE %>% 
-  filter(latin == sp)
-
-sp <- "Pleuronectes platessa"
-SPCODE %>% 
-  filter(latin == sp)
-worms %>% filter(latin == sp)
-worms %>% filter(speccode == "127143")
-# hmmm, not finding the plaice
-```
-
-```{r, echo = FALSE, eval = FALSE}
-# More abandoned trials
-library(datrasr)
-DatrasSpeciesCodes %>% 
-  tbl_df() %>% 
-  rename(latin = scientific.name,
-         speccodetype = code_type,
-         speccode = code_number) %>% 
-  mutate(latin = as.character(latin),
-         speccodetype = toupper(as.character(speccodetype))) %>% 
-  distinct() %>% 
-  select(speccodetype, speccode, latin) ->
-  datras_species_codes
-devtools::use_data(datras_species_codes, overwrite = TRUE)
 ```

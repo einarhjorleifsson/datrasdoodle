@@ -15,10 +15,10 @@ Lets start with only focusing on one species.
 ```{r warning = FALSE, message = FALSE}
 library(tidyverse)
 library(modelr)
-load("data/nsibts_tidy.rda")
+ca <- read_rds("data/nsibts_ca.rds")
 d <- 
-  nsibts_tidy$ca %>% filter(latin == "Pleuronectes platessa") %>% 
-  as_tibble() %>% 
+  ca %>% 
+  filter(latin == "Pleuronectes platessa") %>% 
   # CHECK: Not sure if this is correct
   mutate(mature = ifelse(maturity %in% c(1, 61), 0, 1)) %>% 
   drop_na() %>% 
@@ -77,7 +77,7 @@ common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
             "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
             "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
 d <- 
-  nsibts_tidy$ca %>% 
+  ca %>% 
   filter(latin %in% common) %>% 
   as_tibble() %>% 
   mutate(mature = ifelse(maturity %in% c(1, 61), 0, 1)) %>% 
@@ -97,6 +97,7 @@ res
 res %>% tidy(fit)
 res %>% glance(fit)
 # here really want to predict using new shorter data frame
+
 res %>% 
   augment(fit, type.predict = "response") %>% 
   filter(age <= 10) %>% 
@@ -110,7 +111,7 @@ res %>%
 
 ## Stock recruitment relationship
 
-```{r, eval = FALSE}
+```{r}
 rby <-
   fishvice::read_separ("/net/hafkaldi/export/u2/reikn/hoski/Mackerel/HCRSimulations/2periods/",
                        "HockeyAcf00",

@@ -1,0 +1,90 @@
+# tidy witch {#witch}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+
+```{r}
+library(lubridate)
+library(stringr)
+library(tidyices)   # devtools::install_github("fishvice/tidyices")
+library(tidyverse)
+```
+
+
+```{r}
+sp <- read_rds("data/species.rda")
+Latin <- sp %>% filter(valid_aphia == 127136) %>% pull(latin)
+area <- c("31F0","31F1","31F2","31F3","31F6","32F0","32F1","32F2","32F3","32F4","33F1","33F2","33F3","33F4","34F0","34F1","34F2","34F3","34F4","34F5","35F0","35F1","35F2","35F3","35F4","35F5","36E8","36E9","36F0","36F1","36F2",
+          "36F3","36F4","36F5","36F6","36F7","36F8","37E9","37F0","37F1","37F2","37F3","37F4","37F5","37F6","37F7","37F8","38E8","38E9","38F0","38F1","38F2","38F3","38F4","38F5","38F6","38F7","38F8","39E8","39E9",
+          "39F0","39F1","39F2","39F3","39F4","39F5","39F6","39F7","39F8","40E7","40E8","40E9","40F0","40F1","40F2","40F3","40F4","40F5","40F6","40F7","40F8","41E7","41E8","41E9","41F0","41F1","41F2","41F3","41F4","41F5",
+          "41F6","41F7","41F8","42E7","42E8","42E9","42F0","42F1","42F2","42F3","42F4","42F5","42F6","42F7","42F8","43E7","43E8","43E9","43F0","43F1","43F2","43F3","43F4","43F5","43F6","43F7","44E6","44E7","44E8",
+          "44E9","44F0","44F1","44F2","44F3","44F4","44F5","44F6","45E6","45E7","45E8","45E9","45F0","45F1","45F2","45F3","45F4","45F5","45F6","46E6","46E7","46E8","46E9","46F0","46F1","46F2","46F3","46F4","46F5",
+          "47E6","47E7","47E8","47E9","47F0","47F1","47F2","47F3","47F4","47F5","48E6","48E7","48E8","48E9","48F0","48F1","48F2","48F3","48F4","48F5","49E6","49E7","49E8","49E9","49F0","49F1","49F2",
+          "49F3","49F4","50E6","50E7","50E8","50E9","50F0","50F1","50F2","50F3","50F4","51E6","51E7","51E8","51E9","51F0","51F1","51F2","51F3","51F4","52E6","52E7","52E8","52E9","52F0","52F1","52F2",
+          "52F3","52F4","31F4","32F5","33F5","34F6","35F6","47F6","33F0","31F5","49F5","49F6","50F6","33F6","32F6","46F6","32F7","35F7","34F7","44F7","43F8","44F8","45F8","43F9","44F9","45F9","46F9",
+          "41G0","42G0","43G0","44G0","45G0","46G0","47G0","41G1","42G1","43G1","44G1","45G1","46G1","41G2","42G2","43G2","48G0")
+
+hh <- read_rds("data/nsibts_hh.rds")
+hl <- read_rds("data/nsibts_hl.rds")
+  
+d <-
+  hl %>%
+  # wg approach
+  mutate(length = floor(length) %>% as.integer()) %>%
+  filter(latin %in% Latin,
+         # the is.na stuff is just to mimic exactly the wg-code
+         #   but it serves no purpose
+         (length > 0 | is.na(length))) %>%
+  mutate(mat = ifelse(length < 34, 0, 1),
+         wt = (0.001 * length^3.458) / 1000) %>%
+  # Collapse the length structure, summarise stuff by tow
+  # note: not exactly the same grouping as in the wg-code
+  group_by(id, latin) %>%
+  summarise(n.tot = sum(n,            na.rm = TRUE),
+            n.mat = sum(n * mat,      na.rm = TRUE),
+            b.tot = sum(n * wt,       na.rm = TRUE),
+            b.mat = sum(n * wt * mat, na.rm = TRUE)) %>%
+  right_join(hh) %>%
+  # Here take case of zero hauls - there is a better coding way
+  mutate(n.tot = ifelse(is.na(n.tot), 0, n.tot),
+         n.mat = ifelse(is.na(n.mat), 0, n.mat),
+         b.tot = ifelse(is.na(b.tot), 0, b.tot),
+         b.mat = ifelse(is.na(b.mat), 0, b.mat)) %>%
+  # Whatever not additional filter
+  filter(haulval == "V",
+         daynight == "D",
+         bycspecreccode != 0) %>%
+  # Mean by statistical recangle
+  group_by(year, statrec, quarter) %>%
+  summarise(n.tot = mean(n.tot, na.rm = TRUE),
+            n.mat = mean(n.mat, na.rm = TRUE),
+            b.tot = mean(b.tot, na.rm = TRUE),
+            b.mat = mean(b.mat, na.rm = TRUE)) %>%
+  # Filter only the area of interest
+  filter(statrec %in% area) %>%
+  # Summarise by year an quarter
+  group_by(year, quarter) %>%
+  # A mean of a mean is a very odd statistic
+  summarise(n_tot = mean(n.tot, na.rm = TRUE),
+            n_mat = mean(n.mat, na.rm = TRUE),
+            b_tot = mean(b.tot, na.rm = TRUE),
+            b_mat = mean(b.mat, na.rm = TRUE))
+# Now for some plotting
+d %>%
+  filter(year >= 1991) %>% 
+  gather(variable, value, n_tot:b_mat) %>%
+  separate(col = variable, into = c("type", "class"), sep = "_", remove = FALSE) %>%
+  mutate(type = ifelse(type == "n", "Abundance", "Biomass"),
+         class = ifelse(class == "mat", "Mature", "Total")) %>% 
+  ggplot(aes(year, value, colour = class)) +
+  geom_point() +
+  geom_line() +
+  facet_grid(type ~ quarter, scale = "free_y") +
+  scale_color_brewer(palette = "Set1") +
+  expand_limits(y = 0) +
+  labs(x = NULL, y = "kg or abundance per 60 minutes",
+       colour = "Stock")
+```
+

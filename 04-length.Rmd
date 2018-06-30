@@ -1,16 +1,16 @@
 # Length data {#length}
 
 ```{r, warning = FALSE, message = FALSE}
-library(lubridate)
-library(stringr)
-library(tidyices)
 library(tidyverse)
-library(ggjoy)
+library(lubridate)
+library(tidyices)
+library(ggridges)
 ```
 
 
 ```{r}
-load("data/nsibts_tidy.rda")
+hh <- read_rds("data/nsibts_hh.rds")
+hl <- read_rds("data/nsibts_hl.rds")
 ```
 
 ## CPUE per length per haul
@@ -21,10 +21,9 @@ common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
             "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
             "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
 cpue <- 
-  #                        only valid hauls
-  cpue_per_length_per_haul(st = nsibts_tidy$hh %>% filter(haulval == "V",
-                                                          !is.na(area)),
-                           le = nsibts_tidy$hl) %>% 
+  # only valid hauls
+  cpue_per_length_per_haul(hh = hh %>% filter(haulval == "V", !is.na(area)),
+                           hl = hl) %>% 
   filter(latin %in% common) %>% 
   # debugging, this should be fixed upstream
   filter(!is.na(length))
@@ -42,9 +41,8 @@ cpue2 <-
 fi <- 
   "~/prj2/bookdown/datrasdoodle/data-raw/CPUE_per_length_per_haul.csv"
 cpue.datras.service.product <-
-  read_csv(fi, na = "-9")
-colnames(cpue.datras.service.product) <- 
-  tolower(colnames(cpue.datras.service.product))
+  read_csv(fi, na = "-9") %>% 
+  rename_all(tolower)
 cpue.datras.service.product <-
   cpue.datras.service.product %>%
   filter(year %in% 2005:2016) %>% 
@@ -84,16 +82,18 @@ diff %>%
 
 What is the story with the single haddock?:
 ```{r}
-load("data/raw_data.rda")
-colnames(raw_hl) <- tolower(colnames(raw_hl))
-raw_hl %>% 
+load("data/nsibts_raw.rda")
+hl_raw <-
+  nsibts_raw$hl %>% 
+  rename_all(tolower)
+hl_raw %>% 
   as_tibble() %>% 
   id_unite() %>% 
   filter(id == "2009_1_THA2_GOV_26",
          valid_aphia == 126437) %>% glimpse()
 ```
 
-So, it does not appear in the raw_hl dataframe. And because these are all of `lngtcode == "0"` these fish are what is termed as 0.5 cm length class, reporting units of millimeter. For the time being this does not quite make sense in my head.
+So, it does not appear in the hl_raw dataframe. And because these are all of `lngtcode == "0"` these fish are what is termed as 0.5 cm length class, reporting units of millimeter. For the time being this does not quite make sense in my head.
 
 What do we have in tidy for the haul and species in question?:
 ```{r}
@@ -162,22 +162,22 @@ d %>%
          year >= 1998,
          quarter == 1,
          between(length, 9, 45)) %>% 
-  ggplot(aes(length,  as.factor(year), group = year, height = n)) +
-  geom_joy(stat = "identity", scale = 5, alpha = 0.5)
+  ggplot(aes(length,  as.factor(year), group = year, height = n/1e5)) +
+  geom_ridgeline(stat = "identity", scale = 5, alpha = 0.5)
 d %>%
   filter(latin == "Gadus morhua",
          year >= 2000,
          quarter == 1,
          between(length, 5, 100)) %>% 
-  ggplot(aes(length,  as.factor(year), height = b)) +
-  geom_joy(stat = "identity", scale = 3, alpha = 0.5) +
+  ggplot(aes(length,  as.factor(year), height = n/1e3)) +
+  geom_ridgeline(stat = "identity", scale = 3, alpha = 0.5) +
   scale_x_continuous(breaks = seq(0, 120, by = 10))
 d %>%
   filter(latin == "Pleuronectes platessa",
          year >= 2000,
          quarter == 1) %>% 
-  ggplot(aes(length, as.factor(year), height = n)) +
-  geom_joy(stat = "identity", alpha = 0.5)
+  ggplot(aes(length, as.factor(year), height = n/1e3)) +
+  geom_ridgeline(stat = "identity", alpha = 0.5)
 ```
 
 

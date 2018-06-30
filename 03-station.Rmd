@@ -10,8 +10,7 @@ library(tidyverse)
 
 
 ```{r}
-load("data/nsibts_tidy.rda")
-ST <- nsibts_tidy$ST
+hh <- read_rds("data/nsibts_hh.rds")
 ```
 
 ```{r}

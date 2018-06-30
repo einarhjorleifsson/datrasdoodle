@@ -1,3 +1,3 @@
 # datrasdoodle
 
-datras goes tidyvers
+datras goes tidyverse

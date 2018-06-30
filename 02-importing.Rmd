@@ -1,10 +1,9 @@
 # Importing data {#import}
 
 ```{r, warning = FALSE, message = FALSE}
-library(lubridate)
-library(stringr)
-library(tidyices)
 library(tidyverse)
+library(lubridate)
+library(tidyices)
 ```
 
 ## Data download
@@ -13,33 +12,52 @@ Download the raw data using the `getDATRAS` function from the [icesDatras](https
 
 ```{r, eval = FALSE}
 # not run
-yrs <- 1975:2017
+yrs <- 1975:2018
 qts <- c(1, 3)
-raw_hh <- 
+hh_raw <- 
   icesDatras::getDATRAS(record = "HH", survey = "NS-IBTS", years = yrs, quarters = qts)
-raw_hl <- 
+hl_raw <- 
   icesDatras::getDATRAS(record = "HL", survey = "NS-IBTS", years = yrs, quarters = qts)
-raw_ca <- 
+ca_raw <- 
   icesDatras::getDATRAS(record = "CA", survey = "NS-IBTS", years = yrs, quarters = qts)
-species <- tidyices::get_latin(raw_hl)
+species <- tidyices::get_latin()
 
-save(raw_hh, raw_hl, raw_ca, species, file = "data/raw_data.rda")
+nsibts_raw <- list(hh = hh_raw, hl = hl_raw, ca = ca_raw, sp = species)
+save(nsibts_raw, file = "data/nsibts_raw.rda")
+write_rds(species, "data/species_code.rda")
 ```
 
 ## Data tidying
 
-```{r, eval = FALSE}
-attach("data/raw_data.rda")
+Lets load the raw data we have imported earlier:
+
+```{r}
+load("data/nsibts_raw.rda")
 ```
 
-### The station data
 
-<!-- Need to explain the area stuff -->
+### The haul data
+
+The haul dataframe contains one record per haul and is in a relatively tidy format. The function `tidy_hh` does the following:
+
+* The unique key: The linkage to other dataframes is through the combined key of year, quarter, ship, gear and haulno. In order to facilitate linkage these variables are combined into a single unique key names **id**. In the haul table the original variables are retained.
+* A datetime variable: Information of the date and time of haul shot are stored in four variables: year, month, day and timeshot. These variables are combined into a single **datetime** variable.
+* By default, only selected variables are returned, these being: id, year,
+quarter, survey, ship, gear, haulno, date, country, depth, haulval, hauldur,
+shootlat, shootlong, haullat, haullong,
+statrec, daynight, datatype, stdspecreccode, bycspecreccode)
+
 
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
 hh <-
-  raw_hh %>%
-  tidyices::tidy_hauls()
+  nsibts_raw$hh %>% 
+  tidyices::tidy_hh()
+```
+
+#### Roundfish area
+
+In this booklet one largely works with the NS-IBTS data. In some of the steps the "Roundfish area" is used. This 
+```{r, message = FALSE, warning = FALSE, eval = FALSE}
 ns_area <- rgdal::readOGR("data-raw/NS_IBTS_RF.dbf", verbose = FALSE)
 hh <-
   hh %>% 
@@ -63,9 +81,10 @@ Processing:
 * Select only variable that are needed in further processing
     
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
+species <- read_rds("data/species.rda")
 hl <-
-  raw_hl %>%
-  tidyices::tidy_lengths(hh, species) %>% 
+  nsibts_raw$hl %>% 
+  tidyices::tidy_hl(hh, species) %>% 
   select(-species)
 ```
 
@@ -73,15 +92,16 @@ hl <-
 
 ```{r, eval = FALSE}
 ca <-
-  raw_ca %>% 
-  tidyices::tidy_ages(species = species) %>% 
+  nsibts_raw$ca %>% 
+  tidyices::tidy_ca(species = species) %>% 
   select(-species)
 ```
 
 ### Save stuff for later use
 
 ```{r, eval = FALSE}
-nsibts_tidy <- list(hh = hh, hl = hl, ca = ca, sp = species)
-save(nsibts_tidy, file = "data/nsibts_tidy.rda")
+hh %>% write_rds("data/nsibts_hh.rds")
+hl %>% write_rds("data/nsibts_hl.rds")
+ca %>% write_rds("data/nsibts_ca.rds")
 ```
 
