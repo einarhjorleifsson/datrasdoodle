@@ -26,8 +26,8 @@ area <- c("31F0","31F1","31F2","31F3","31F6","32F0","32F1","32F2","32F3","32F4",
           "52F3","52F4","31F4","32F5","33F5","34F6","35F6","47F6","33F0","31F5","49F5","49F6","50F6","33F6","32F6","46F6","32F7","35F7","34F7","44F7","43F8","44F8","45F8","43F9","44F9","45F9","46F9",
           "41G0","42G0","43G0","44G0","45G0","46G0","47G0","41G1","42G1","43G1","44G1","45G1","46G1","41G2","42G2","43G2","48G0")
 
-hh <- read_rds("data/nsibts_hh.rds")
-hl <- read_rds("data/nsibts_hl.rds")
+hh <- read_rds("data/ns-ibts_hh.rds")
+hl <- read_rds("data/ns-ibts_hl.rds")
   
 d <-
   hl %>%
@@ -87,4 +87,6 @@ d %>%
   labs(x = NULL, y = "kg or abundance per 60 minutes",
        colour = "Stock")
 ```
+
+
 

@@ -13,3 +13,25 @@ description: "Better find some dam description ..."
 ---
 
 # Preamble
+
+```{r, echo = FALSE}
+library(tidyverse)
+
+d <-
+  read_rds("data/hh_datras.rds") #%>% 
+  #group_by(survey) %>% 
+  #filter(year == max(year)) %>% 
+  #filter(quarter == max(quarter))
+d %>% 
+  ggplot(aes(shootlong, shootlat)) +
+  theme_void() +
+  geom_polygon(data = map_data("world"), aes(long, lat, group = group), fill = "grey") +
+  geom_point(size = 0.1, colour = "red", alpha = 0.25) +
+  coord_quickmap(xlim = range(d$shootlong), ylim = range(d$shootlat))
+```
+
+The scribble that follows contains snapshots/examples of tidyverse code used for data exploration analysis of the DATRAS dataset.
+
+
+
+

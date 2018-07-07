@@ -1,5 +1,10 @@
 # Length data {#length}
 
+## Preamble
+___
+
+Load libraries and data:
+
 ```{r, warning = FALSE, message = FALSE}
 library(tidyverse)
 library(lubridate)
@@ -7,11 +12,142 @@ library(tidyices)
 library(ggridges)
 ```
 
+```{r}
+hh <- read_rds("data/ns-ibts_hh.rds")
+hl <- read_rds("data/ns-ibts_hl.rds")
+```
+
+## Catch per haul
+
+Since the length data are standardized to 60 minutes it is easy to calculate the abundance per haul.
 
 ```{r}
-hh <- read_rds("data/nsibts_hh.rds")
-hl <- read_rds("data/nsibts_hl.rds")
+by.haul <- 
+  hl %>% 
+  group_by(id) %>% 
+  summarise(n = sum(n))
 ```
+
+In the code above we have basically collapsed the abundance by species and length going from `r nrow(hl)` observations) to `r nrow(by.haul)` observations. 
+
+Now the latter value only refers to the number of hauls where some fish was recorded, while the total number of stations in the full dataset is the number of rows in the `hh`-dataframe (`r nrow(hh)` hauls). The difference represents the number of zero stations. Now in order to include the stations with zero catch we simply do:
+
+```{r}
+by.haul <-
+  hh %>% 
+  left_join(by.haul) %>%
+  mutate(n = ifelse(is.na(n), 0, n))
+```
+
+A quick count:
+```{r}
+table(by.haul$haulval, by.haul$n == 0)
+```
+
+reveals that we have 27577 valid hauls with fish and 131 valid hauls where no fish was caught.
+
+Since we are here we may as well look at the temporal trend in the median abundance using only the valid hauls:
+
+```{r}
+by.haul %>% 
+  filter(haulval == "V") %>% 
+  group_by(year, quarter) %>% 
+  summarise(m = mean(n)) %>% 
+  ggplot(aes(year, m)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~ quarter)
+```
+
+So we are talking about some 10-30 thousand fish being caught per 60 minutes haul with the quarter 3 survey generally showing higher mean than the quarter 1 survey. Using the mean may not be appropriate here, given the general distribution of abundance by haul one observes in groundfish surveys:
+
+```{r}
+by.haul %>% 
+  filter(haulval == "V") %>% 
+  mutate(n = ifelse(n > quantile(n, 0.99), quantile(n, 0.99), n)) %>% 
+  ggplot(aes(n)) +
+  geom_histogram()
+```
+
+The ggplot2 package has a very nice (but little known) summary statistics that comes to the rescue:
+
+```{r}
+by.haul %>% 
+  filter(haulval == "V") %>% 
+  ggplot(aes(year, n, colour = factor(quarter))) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
+  expand_limits(y = 0) +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = NULL, y = NULL,
+       colour = "Quarter",
+       title = "Annual abundance",
+       subtitle = "Bootstrap mean and confidence interval")
+```
+
+
+A minor tweaking in the code would also allow us to adress the question on the mean number of species that have been caught per haul (or is it only the mean of the species where length measurments are taken??) through time:
+```{r}
+hh %>% 
+  filter(haulval == "V") %>% 
+  left_join(hl %>% 
+              group_by(id) %>% 
+              summarise(n.species = n_distinct(latin))) %>% 
+  ggplot(aes(year, n.species, colour = factor(quarter))) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
+  expand_limits(y = 0) +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = NULL, y = NULL,
+       colour = "Quarter",
+       title = "Number of species per haul",
+       subtitle = "Bootstrap mean and confidence interval")
+```
+
+
+## Size spectrum
+
+```{r}
+hl %>% 
+  mutate(length = floor(length)) %>% 
+  group_by(id, length) %>% 
+  summarise(n = mean(n)) %>% 
+  id_separate() %>% 
+  group_by(year, quarter, length) %>% 
+  summarise(m = mean(n)) %>% 
+  filter(quarter == 1,
+         #length <= 50,
+         year %in% seq(1980, 2020, by = 5)) %>% 
+  ggplot(aes(length, m, colour = factor(year))) +
+  geom_line() +
+  #scale_x_log10() +
+  scale_y_log10()
+```
+
+
+
+```{r}
+by.haul %>% 
+  filter(year == 2017) %>% 
+  ggplot(aes(shootlong, shootlat, size = n)) +
+  geom_point(colour = "red", alpha = 0.3) + 
+  scale_size_area(max_size = 10) +
+  coord_quickmap() +
+  facet_wrap(~ quarter)
+```
+
+```{r}
+hh %>% 
+  left_join(hl %>%
+              mutate(b = n * 0.00001 * length^3) %>% 
+              group_by(id) %>% 
+              summarise(b = sum(b))) %>% 
+  filter(year == 2017) %>% 
+   ggplot(aes(shootlong, shootlat, size = b)) +
+  geom_point(colour = "red", alpha = 0.3) + 
+  scale_size_area(max_size = 10) +
+  coord_quickmap() +
+  facet_wrap(~ quarter)
+```
+
 
 ## CPUE per length per haul
 ___
@@ -22,7 +158,7 @@ common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
             "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
 cpue <- 
   # only valid hauls
-  cpue_per_length_per_haul(hh = hh %>% filter(haulval == "V", !is.na(area)),
+  cpue_per_length_per_haul(hh = hh %>% filter(haulval == "V", !is.na(nsarea)),
                            hl = hl) %>% 
   filter(latin %in% common) %>% 
   # debugging, this should be fixed upstream
@@ -39,7 +175,7 @@ cpue2 <-
   select(id, latin, length, cpue.tidy = n) %>% 
   mutate(length = as.integer(length * 10))
 fi <- 
-  "~/prj2/bookdown/datrasdoodle/data-raw/CPUE_per_length_per_haul.csv"
+  "data-raw/CPUE per length per haul per hour_2018-06-30 15_34_50.csv"
 cpue.datras.service.product <-
   read_csv(fi, na = "-9") %>% 
   rename_all(tolower)
@@ -82,9 +218,9 @@ diff %>%
 
 What is the story with the single haddock?:
 ```{r}
-load("data/nsibts_raw.rda")
+raw <- read_rds("data-raw/datras/ns-ibts_raw.rds")
 hl_raw <-
-  nsibts_raw$hl %>% 
+  raw$hl %>% 
   rename_all(tolower)
 hl_raw %>% 
   as_tibble() %>% 
@@ -118,7 +254,7 @@ We have only 20, 30 and 40 cm fish. So it seems like in the dsp the length class
 ```{r, message = FALSE, warning = FALSE}
 d <-
   cpue %>% 
-  mutate(b = n * 0.01 * length^3) %>% 
+  mutate(b = n * 1e-5 * length^3) %>% 
   group_by(id, latin) %>% 
   summarise(n = sum(n),
             b = sum(b)) %>%
@@ -134,17 +270,18 @@ d %>%
   labs(x = NULL, y = NULL,
        colour = "Quarter",
        title = "Annual abundance",
-       subtitle = "Bootstrap mean and confidence interval of individual tows")
+       subtitle = "Bootstrap mean and confidence interval of individual standardized tow duration [60 minutes]")
 d %>% 
   ggplot(aes(year, b, colour = factor(quarter))) +
   stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
   expand_limits(y = 0) +
   facet_wrap(~ latin, scale = "free_y") +
   scale_color_brewer(palette = "Set1") +
-  labs(x = NULL, y = NULL,
-       colour = "Quarter",
+  scale_x_continuous(name = NULL, breaks = seq(1960, 2020, by = 10)) +
+  scale_y_continuous(name = NULL, labels = NULL) +
+  labs(colour = "Quarter",
        title = "Annual biomass",
-       subtitle = "Bootstrap mean and confidence interval of individual tows")
+       subtitle = "Bootstrap mean and confidence interval of individual standardized tow duration [60 minutes]")
 ```
 
 

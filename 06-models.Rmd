@@ -15,7 +15,7 @@ Lets start with only focusing on one species.
 ```{r warning = FALSE, message = FALSE}
 library(tidyverse)
 library(modelr)
-ca <- read_rds("data/nsibts_ca.rds")
+ca <- read_rds("data/ns-ibts_ca.rds")
 d <- 
   ca %>% 
   filter(latin == "Pleuronectes platessa") %>% 

@@ -42,8 +42,8 @@ In the Datras data the species are encoded. There are three columns associated w
 
 Lets look at the 2 most common species in the length database by speccodetype:
 ```{r}
-load("data/nsibts_raw.rda")
-nsibts_raw$hl %>% 
+raw <- read_rds("data-raw/datras/ns-ibts_raw.rds")
+raw$hl %>% 
   rename_all(tolower) %>% 
   group_by(speccodetype, speccode, specval) %>% 
   summarise(n = n()) %>%
@@ -121,8 +121,8 @@ get_species <- function(speccodetype, speccode) {
 ```
 
 Does not work:
-```{r}
-nsibts_raw$hl %>% 
+```{r, eval = FALSE}
+raw$hl %>% 
   rename_all(tolower) %>% 
   select(speccodetype, speccode, specval) %>% 
   distinct() %>% 

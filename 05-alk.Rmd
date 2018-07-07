@@ -9,9 +9,9 @@ library(tidyices)
 ```
 
 ```{r}
-hh <- read_rds("data/nsibts_hh.rds")
-hl <- read_rds("data/nsibts_hl.rds")
-ca <- read_rds("data/nsibts_ca.rds")
+hh <- read_rds("data/ns-ibts_hh.rds")
+hl <- read_rds("data/ns-ibts_hl.rds")
+ca <- read_rds("data/ns-ibts_ca.rds")
 ```
 
 ## Quick overview
@@ -22,7 +22,7 @@ alk <-
   ca %>% 
   filter(!is.na(age)) %>% 
   # get round fish area - not needed at this stage
-  left_join(hh %>% select(id, area)) %>% 
+  left_join(hh %>% select(id, nsarea)) %>% 
   # round length to the neares length class
   #   ?? should one use floor here?
   mutate(length = as.integer(round(length, 0))) %>% 
@@ -83,8 +83,8 @@ alk <-
   ca %>% 
   filter(!is.na(age)) %>% 
   # get round fish area - actually ignored here
-  left_join(hh %>% select(id, area)) %>% 
-  filter(!is.na(area)) %>% 
+  left_join(hh %>% select(id, nsarea)) %>% 
+  filter(!is.na(nsarea)) %>% 
   id_separate() %>% 
   as_tibble() %>% 
   # round length to the neares length class
@@ -144,7 +144,7 @@ x1 <-
   summarise(n.dsp = sum(n, na.rm = TRUE))
 d <- 
   ca %>% 
-  right_join(hh %>% filter(haulval == "V", !is.na(area)) %>% select(id)) %>% 
+  right_join(hh %>% filter(haulval == "V", !is.na(nsarea)) %>% select(id)) %>% 
   id_separate() %>% 
   filter(latin == "Pleuronectes platessa",
          year == 2005,
@@ -172,7 +172,7 @@ x1 <-
   summarise(n.dsp = sum(n, na.rm = TRUE))
 d <- 
   ca %>% 
-  right_join(hh %>% filter(haulval == "V", !is.na(area)) %>% select(id)) %>% 
+  right_join(hh %>% filter(haulval == "V", !is.na(nsarea)) %>% select(id)) %>% 
   id_separate() %>% 
   filter(latin == "Merlangius merlangus",
          year == 2005,
