@@ -43,7 +43,7 @@ alk %>%
   scale_fill_viridis(direction = -1)
 ```
 
-We see in the figure above that something is rotten in the state of denmar, "old" fish but with very small length. This is likely an error in the lngtcode field
+We see in the figure above that something is rotten in the state of Denmark, "old" fish but with very small length. This is likely an error in the lngtcode field
 
 ```{r}
 alk %>% 

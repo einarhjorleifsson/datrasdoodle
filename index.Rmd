@@ -3,7 +3,10 @@ title: "Playing with Datras data"
 author: "Einar Hjörleifsson"
 date: "`r Sys.Date()`"
 site: bookdown::bookdown_site
-output: bookdown::gitbook
+output:
+  bookdown::gitbook:
+    fig_height: 6
+    fig_width: 9
 documentclass: book
 bibliography: [book.bib, packages.bib]
 biblio-style: apalike
@@ -14,20 +17,30 @@ description: "Better find some dam description ..."
 
 # Preamble
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
 library(tidyverse)
-
+library(gisland)
 d <-
-  read_rds("data/hh_datras.rds") #%>% 
-  #group_by(survey) %>% 
-  #filter(year == max(year)) %>% 
-  #filter(quarter == max(quarter))
+  read_rds("data/hh_datras.rds") %>% 
+  filter(year == 2017)
+
+icesarea <- 
+  gisland::read_sf_ftp("fao-areas") %>%
+  mutate(reg = str_sub(name, 1, 2)) %>%
+  # only ICES areas
+  filter(reg == "27") %>% 
+  # turn the sf-object into sp-object so it can be used by calling geom_path
+  as("Spatial")
+
 d %>% 
-  ggplot(aes(shootlong, shootlat)) +
+  ggplot() +
   theme_void() +
   geom_polygon(data = map_data("world"), aes(long, lat, group = group), fill = "grey") +
-  geom_point(size = 0.1, colour = "red", alpha = 0.25) +
-  coord_quickmap(xlim = range(d$shootlong), ylim = range(d$shootlat))
+  geom_path(data = icesarea, aes(long, lat, group = group), colour = "grey") +
+  geom_point(aes(shootlong, shootlat, colour = survey),
+             size = 0.5) +
+  coord_quickmap(xlim = range(d$shootlong), ylim = range(d$shootlat)) +
+  labs(colour = "Survey")
 ```
 
 The scribble that follows contains snapshots/examples of tidyverse code used for data exploration analysis of the DATRAS dataset.

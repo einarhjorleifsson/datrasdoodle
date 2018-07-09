@@ -1,29 +1,169 @@
 # Haul data {#haul}
 
-
-
 ## Preamble
 
-It is recomended that every session in R is started by declaring/loading all the libraries needed to run the session:
+It is recommended that every session in R is started by declaring/loading all the libraries needed to run the session:
 
 ```{r, warning = FALSE, message = FALSE}
 library(tidyverse)
 library(lubridate)
 library(mapdata)
-library(gisland)
+# devtools::install_github("einarhjorleifsson/gisland", dependencies = FALSE)
+library(gisland) 
 ```
 
-Besides loading up the needed it is recomended that the data used is imported upfront. Here we will import the tidy NS-IBTS downloaded and tidyied in the Introduction, this time around we only need the haul data:
+Besides loading up the needed libraries it is recommended that the data used is imported upfront. Here we will import the tidy NS-IBTS downloaded and tidied in the Introduction, this time around we only need the haul data:
 
 ```{r}
 hh <- 
   read_rds("data/ns-ibts_hh.rds") %>% 
   # TODO: Move this upstream, into the tidy_hh function
   #       Should set code up so that it works separately on character and
-  #       numerical vectors
+  #       numerical variables
   mutate_all(funs(ifelse(.==-9, NA_real_, .))) %>% 
   mutate_all(funs(ifelse(.=="-9", NA_character_, .)))
 ```
+
+## Spatial overview
+
+Like most fisheries data survey data are spatial in nature. So it is only natural to start to attempt to get a spatial overview of the survey coverage. As long as we do not need to do some heavy computational (nice introduction to that is (Geocomputation with R)[https://geocompr.robinlovelace.net]) the ggplot2 framework provides seamless extensions when dealing with spatial plotting in R. Here we just jump into the deep end, but a little gentler introduction can e.g. be found [here](http://www.hafro.is/~einarhj/education/tcrenv2017/pre_ggplot2.html).
+
+Since in recent years at least both the start and end of the hauls are reported we can use the `geom_segment`-function to plot the haul track. The following scripts provides an overview of the data for one year by quarter and vessel:
+
+```{r}
+# map of terrestrial area
+xlim <- c(-4, 13)
+ylim <- c(49, 62)
+m <- map_data("worldHires", xlim = xlim, ylim = ylim)
+# data from 2017 and only valid hauls
+hh %>% 
+  filter(year == 2017,
+         haulval == "V") %>% 
+  ggplot() +
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  geom_segment(aes(x = shootlong, y = shootlat, xend = haullong, yend = haullat,
+                   colour = ship), lwd = 1) +
+  coord_quickmap(xlim = xlim, ylim = ylim, expand = FALSE) +
+  facet_wrap(~ quarter) +
+  labs(x = NULL, y = NULL,
+       title = "NS-IBTS 2017",
+       subtitle = "Haul location by quarter and by vessel",
+       colour = "Vessel")
+```
+
+### Gridding data
+
+One is often interested in getting an overview of the gridded data. Gridding is in effect the same thing as binning data when one generates a histogram except that it is two dimensional. For spatial data it is both the longitude and the latitude that is binned (for further background see: [On gridding spatial data](http://www.hafro.is/~einarhj/splatter/post/on-gridding-data/)).
+
+For gridding we will use here a "homemade" function `grade` that resides in the gisland-package (TODO: make link where installing the packages is illustrated). And here we will simply grid by using the ICES rectangle resolution (0.5 x 1.0 degrees) and then count the number of stations in each rectangle. Once done one can use the `geom_raster`-function to generate a spatial visualization:
+
+```{r}
+d <-
+  hh %>% 
+  filter(haulval == "V",
+         year == 2017) %>% 
+  mutate(lon = grade(shootlong, 1),
+         lat = grade(shootlat, 0.5)) %>% 
+  group_by(lon, lat, quarter) %>% 
+  count()
+d %>% 
+  ggplot() +
+  geom_raster(aes(lon, lat, fill = n)) +
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  coord_quickmap(xlim = xlim, ylim = ylim, expand = FALSE) +
+  facet_wrap(~ quarter) +
+  scale_fill_viridis_c(option = "B", direction = -1, breaks = c(1:5), guide = "legend") +
+  labs(x = NULL, y = NULL, fill = "No. stations",
+       title = "NS-IBTS 2017",
+       subtitle = "Number of hauls by ICES rectangles")
+```
+
+Note, that in contrast with the previous script we now "called" the terrestrial layer after the data-layer. Hence the squares that partially cover the water are masked with the shorelines (try revering the layer call in the script above).
+
+```{r, eval = FALSE, echo = FALSE}
+# NOT SHOWN
+# If you are interested in making a little prettier plot try:
+# A north see plot template
+p_ns <- 
+  ggplot() +
+  theme_bw() +
+  scale_x_continuous(name = NULL, minor_breaks = NULL, breaks = seq(-4, 13, by = 1)) +
+  scale_y_continuous(name = NULL, breaks = seq(49, 65, by = 1)) +
+  coord_quickmap(xlim = xlim, ylim = ylim, expand = FALSE)
+p_ns
+# Add the current data
+p_ns +
+  geom_raster(data = d, aes(lon, lat, fill = n)) +
+  # we add terrestrial ara as an overlay, to mask partial ICES rectangles
+  #    "over" the rectangles
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  scale_fill_viridis_c(option = "B", direction = -1, breaks = c(1:5), guide = "legend") +
+  facet_wrap(~ quarter) +
+  labs(colour = "No. stations",
+       title = "NS-IBTS 2017")
+```
+
+One can easily use the above code to obtain similar information using other DATRAS surveys. Or for that matter all the surveys:
+
+```{r}
+d <- 
+  read_rds("data/hh_datras.rds") %>% 
+  filter(haulval == "V",
+         year == 2017) %>% 
+  mutate(lon = grade(shootlong, 1),
+         lat = grade(shootlat, 0.5)) %>% 
+  group_by(lon, lat) %>% 
+  count() %>% 
+  mutate(n = ifelse(n >= 10, "10+", paste0(" ", n)))
+d %>% 
+  ggplot() +
+  geom_raster(aes(lon, lat, fill = n)) +
+  geom_polygon(data = map_data("world"), aes(long, lat, group = group), fill = "grey") +
+  scale_fill_viridis_d(option = "B", direction = -1) +
+  coord_quickmap(xlim = range(d$lon), ylim = range(d$lat)) +
+  labs(x = NULL, y = NULL, fill = "n",
+       title = "DATRAS surveys",
+       subtitle = "Number of hauls by ICES rectangles in 2017")
+```
+
+A little bit of caution here with the respect to the actual dimension of the ICES rectangles across large latitudinal range. TODO: Add the caution ...
+
+### Irregular shapes
+
+When we imported the data we also allocated each haul position to the ICES area system. Hence we can easily make the following plot:
+```{r}
+p <-
+  hh %>% 
+  filter(year == 2017,
+         haulval == "V",
+         quarter == 1) %>% 
+  ggplot() +
+  geom_point(aes(haullong, haullat, colour = faoarea)) +
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  coord_quickmap(xlim = xlim, ylim = ylim) +
+  labs(x = NULL, y = NULL, colour = "ICES area")
+p
+```
+
+The ICES areas are part of the FAO global areas. Because of their irregularity they are generally structured as shapefiles that are of specific formats. Thankfully ggplot2 provides a way of handling such formats such that the user does not really know all the nitty gritty details that reside under the hood (TODO: make a link to where this is explained in more detail).
+
+For the sake of full reproducibility the shapefiles have been made available at an [ftp-site](ftp://ftp.hafro.is/pub/reiknid/einar/shapes) so that they be easily read into R. A convenient function that resides in the gisland package makes the process of downloading and importing a little less painful in terms of coding:
+
+```{r}
+icesarea <- 
+  gisland::read_sf_ftp("fao-areas") %>%
+  mutate(reg = str_sub(name, 1, 2)) %>%
+  # only ICES areas
+  filter(reg == "27") %>% 
+  # turn the sf-object into sp-object so it can be used by calling geom_path
+  as("Spatial")
+```
+
+```{r}
+p +
+  geom_path(data = icesarea, aes(long, lat, group = group))
+```
+
 
 ## Temporal overview
 
@@ -69,87 +209,4 @@ hh %>%
        subtitle = "Distribution of haulduration")
 ```
 
-
-## Spatial overview
-
-Like most fisheries data survey data are spatial in nature. So it is only natural to start to attempt to get a spatial overview of the survey coverage. 
-
-
-Lets generate a base map:
-```{r}
-xlim <- c(-4, 13)
-ylim <- c(49, 62)
-m <- map_data("worldHires", xlim = xlim, ylim = ylim)
-p <- 
-  ggplot() +
-  #theme_bw() +
-  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
-  scale_x_continuous(name = NULL, minor_breaks = NULL, breaks = seq(-10, 20, by = 1)) +
-  scale_y_continuous(name = NULL, breaks = seq(49, 65, by = 1)) +
-  coord_quickmap(xlim = xlim, ylim = ylim, expand = FALSE)
-p
-```
-
-```{r}
-d <-
-  hh %>% 
-  filter(year == 2013,
-         haulval == "V") 
-p +
-  geom_segment(data = d, aes(x = shootlong, y = shootlat, xend = haullong, yend = haullat,
-                   colour = ship), lwd = 2) +
-  scale_color_brewer(palette = "Set1") +
-  #theme(legend.position = c(0.8, 0.2)) +
-  labs(colour = "Quarter") +
-  facet_wrap(~ quarter)
-```
-
-```{r}
-d <-
-  hh %>% 
-  filter(haulval == "V",
-         year == 2017) %>% 
-  mutate(lon = grade(shootlong, 1),
-         lat = grade(shootlat, 0.5)) %>% 
-  group_by(lon, lat, quarter) %>% 
-  count()
-d %>% 
-  ggplot() +
-  geom_raster(aes(lon, lat, fill = n)) +
-  scale_fill_viridis_c(option = "B", direction = -1, breaks = c(1:5), guide = "legend") +
-  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
-  coord_quickmap(xlim = xlim, ylim = ylim, expand = FALSE) +
-  facet_wrap(~ quarter)
-```
-
-```{r}
-p <- 
-  ggplot() +
-  theme_bw() +
-  scale_x_continuous(name = NULL, minor_breaks = NULL, breaks = seq(-10, 20, by = 1)) +
-  scale_y_continuous(name = NULL, breaks = seq(49, 65, by = 1)) +
-  coord_quickmap(xlim = xlim, ylim = ylim, expand = FALSE)
-p +
-  geom_raster(data = d, aes(lon, lat, fill = n)) +
-  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
-  scale_fill_viridis_c(option = "B", direction = -1, breaks = c(1:5), guide = "legend") +
-  facet_wrap(~ quarter)
-```
-
-```{r}
-d <-
-  hh %>% 
-  filter(haulval == "V",
-         quarter == 1,
-         year %in% c(1965:1980)) 
-p + 
-  geom_point(data = d, aes(shootlong, shootlat, colour = gear)) +
-  facet_wrap(~ year) +
-  scale_colour_brewer(palette = "Set3") +
-  scale_x_continuous(labels = NULL) +
-  scale_y_continuous(labels = NULL) +
-  labs(x = NULL, y = NULL,
-       title = "NS-IBTS",
-       subtitle = "Spatial expansion and gear used")
-```
 
