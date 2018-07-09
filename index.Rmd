@@ -15,7 +15,7 @@ github-repo: einarhjorleifsson/datrasdoodle
 description: "Better find some dam description ..."
 ---
 
-# Preamble
+# Preamble {-}
 
 ```{r, echo = FALSE, message = FALSE, warning = FALSE}
 library(tidyverse)

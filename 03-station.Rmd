@@ -2,6 +2,8 @@
 
 ## Preamble
 
+Move from MK to KM.
+
 It is recommended that every session in R is started by declaring/loading all the libraries needed to run the session:
 
 ```{r, warning = FALSE, message = FALSE}
