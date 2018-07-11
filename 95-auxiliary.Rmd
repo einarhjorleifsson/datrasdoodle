@@ -6,12 +6,13 @@ a little test in editing directly on github ...
 
 ```{r}
 library(tidyverse)
+library(gisland)
 ```
 
 
-```{r, message = FALSE, eval = FALSE}
-sf::st_read("data-raw/NS_IBTS_RF.dbf", quiet = TRUE) %>% 
-  # mutate(AreaName = as.integer(AreaName)) %>% #reulst in an error
+```{r, message = FALSE}
+read_sf_ftp("NS_IBTS_RF") %>% 
+  mutate(AreaName = as.integer(AreaName)) %>%
   ggplot() +
   theme_bw() +
   geom_sf(aes(fill = factor(AreaName))) +
@@ -31,31 +32,34 @@ In the Datras data the species are encoded. There are three columns associated w
     - N: NODC code
     - T: TSN code
     - W: WoRMS ApiaID code
-* **specval**: species validity codes
-    -  0	 Invalid information
-    -  1	 Valid information for use in DATRAS data products
-    -  2	 Partly valid information
-    -  3	 Length composition incomplete
-    -  4	 No length measurements only total number
-    -  5	 Observed only  not measured  not counted  but only presence/absence is registered
-    -  6	 No length measurements  only category catch weight
-    -  7	 No length measurements  only total number and category catch weight
-    -  8	 Only volume (litre) registered
-    -  9	 Valid information available but not recorded in the file
-    - 10	 No category catch weight  only total numbers and length composition
+* **valid_aphia**: An integer code for the species
 
-
-Lets look at the 2 most common species in the length database by speccodetype:
+Lets look at the 2 most common species in the length database by each speccodetype:
 ```{r}
-raw <- read_rds("data-raw/datras/ns-ibts_raw.rds")
-raw$hl %>% 
-  rename_all(tolower) %>% 
-  group_by(speccodetype, speccode, specval) %>% 
+hl <- 
+  read_rds("data-raw/datras/ns-ibts_raw.rds")$hl %>% 
+  rename_all(tolower)
+
+hl %>% 
+  group_by(speccodetype, speccode) %>% 
   summarise(n = n()) %>%
   arrange(desc(n)) %>% 
   group_by(speccodetype) %>% 
   slice(1:2)
 ```
+
+**Does the valid_aphia not match speccode when speccodetype is "W"?**
+
+```{r}
+hl %>% 
+  filter(speccodetype == "W") %>% 
+  mutate(same = ifelse(speccode == valid_aphia, TRUE, FALSE)) %>% 
+  group_by(same) %>% 
+  count()
+```
+
+Not quite, but almost
+
 
 At the Datras home page there is an [API](https://datras.ices.dk/WebServices/DATRASWebService.asmx?op=getSpecies) that allows one to get the latin and common names that are associated with a species code given a species code type. Lets address this directly from within R, getting the name of the most common species in the list above:
 
@@ -123,16 +127,6 @@ get_species <- function(speccodetype, speccode) {
   }
   
 }
-```
-
-Does not work:
-```{r, eval = FALSE}
-raw$hl %>% 
-  rename_all(tolower) %>% 
-  select(speccodetype, speccode, specval) %>% 
-  distinct() %>% 
-  slice(1:10) %>% 
-  mutate(latin = map(speccodetype, speccode, get_species))
 ```
 
 Instead of addressing the API each time one wants to find the latin name of a species it may be more conventient to generate a specific R dataframe that we store locally on the computer. Following is the code used to generate the species table: 
@@ -209,5 +203,19 @@ sp <-
 for (i in 1:nrow(sp)) {
   sp$latin[i] <- get_species(sp$speccodetype[i], sp$speccode[i])
 }
-save(sp, file = "data/sp.rda")
 ```
+
+## What is the meaning of each specval code?
+
+* **specval**: validity codes
+    -  0	 Invalid information
+    -  1	 Valid information for use in DATRAS data products
+    -  2	 Partly valid information
+    -  3	 Length composition incomplete
+    -  4	 No length measurements only total number
+    -  5	 Observed only  not measured  not counted  but only presence/absence is registered
+    -  6	 No length measurements  only category catch weight
+    -  7	 No length measurements  only total number and category catch weight
+    -  8	 Only volume (litre) registered
+    -  9	 Valid information available but not recorded in the file
+    - 10	 No category catch weight  only total numbers and length composition

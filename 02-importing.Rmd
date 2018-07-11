@@ -3,7 +3,13 @@
 ```{r, warning = FALSE, message = FALSE}
 library(tidyverse)
 library(lubridate)
+library(sf)
+library(icesDatras)
 library(tidyices)
+# devtools::install_github("einarhjorleifsson/gisland", dependencies = FALSE)
+library(gisland)
+# devtools::install_github("ropensci/worrms")
+library(worrms)
 ```
 
 ## Data download
@@ -15,33 +21,31 @@ Download the raw data using the `getDATRAS` function from the [icesDatras](https
 yrs <- 1965:2018
 qts <- c(1, 3)
 hh_raw <- 
-  icesDatras::getDATRAS(record = "HH", survey = "NS-IBTS", years = yrs, quarters = qts)
+  getDATRAS(record = "HH", survey = "NS-IBTS", years = yrs, quarters = qts)
 hl_raw <- 
-  icesDatras::getDATRAS(record = "HL", survey = "NS-IBTS", years = yrs, quarters = qts)
+  getDATRAS(record = "HL", survey = "NS-IBTS", years = yrs, quarters = qts)
 ca_raw <- 
-  icesDatras::getDATRAS(record = "CA", survey = "NS-IBTS", years = yrs, quarters = qts)
-species <- tidyices::get_latin()
+  getDATRAS(record = "CA", survey = "NS-IBTS", years = yrs, quarters = qts)
 
-nsibts_raw <- list(hh = hh_raw, hl = hl_raw, ca = ca_raw, sp = species)
-save(nsibts_raw, file = "data/nsibts_raw.rda")
-write_rds(species, "data/species_code.rda")
+raw <- list(hh = hh_raw, hl = hl_raw, ca = ca_raw)
+write_rds(raw, file = "data-raw/datras/ns-ibts_raw.rds")
 ```
-
 
 ## Data tidying
 
-Lets load the raw data we have imported earlier:
+TODO: Need to rewrite the code to reflect updates on species code handeling.
+
+To load the data we have downloaded earlier one can read in the data by:
 
 ```{r, eval = FALSE}
-load("data/nsibts_raw.rda")
+raw <- read_rds("data-raw/datras/ns-ibts_raw.rds")
 ```
-
 
 ### The haul data
 
 The haul dataframe contains one record per haul and is in a relatively tidy format. The total number of variables (61) may though be a bit overwhelming for routine abundance estimates. The function `tidy_hh` does the following:
 
-* The unique key: The linkage to other dataframes is through the combined key of year, quarter, ship, gear and haulno. This combination of variable is unique within the haul-dataframe. In order to facilitate linkage the key variables are combined into a single variable named **id**. In the haul table the original variables are retained.
+* Creates a unique key: The linkage to other dataframes is through the combined key of year, quarter, ship, gear and haulno. This combination of variable is unique within the haul-dataframe. In order to facilitate linkage the key variables are combined into a single variable named **id**. In the haul table the original variables are retained.
 * A datetime variable: Information of the date and time of haul shot are stored in four variables: year, month, day and timeshot. These variables are combined into a single **datetime** variable.
 * By default, only selected variables are returned, these being: id, year,
 quarter, survey, ship, gear, haulno, date, country, depth, haulval, hauldur,
@@ -50,38 +54,40 @@ shootlat, shootlong, haullat, haullong, statrec, daynight, datatype, stdspecrecc
 
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
 hh <-
-  nsibts_raw$hh %>% 
-  tidyices::tidy_hh()
+  raw$hh %>% 
+  tidy_hh()
 ```
 
 #### Roundfish area
 
-In this booklet one largely works with the NS-IBTS data. In some of the steps the "Roundfish area" (LINK) is used. A new numerical variable is created that contains the numerical code of the "Roundfish area" that the haul belongs to by: 
+In this booklet the example code is largely based on the NS-IBTS data. In some of the steps the "Roundfish area" (LINK) is used. A new numerical variable is created that contains the numerical code of the "Roundfish area" that the haul belongs to by: 
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
-ns_area <- rgdal::readOGR("data-raw/NS_IBTS_RF.dbf", verbose = FALSE)
+ns_area <- 
+  read_sf_ftp("NS_IBTS_RF") %>% 
+  as("Spatial")
 hh <-
   hh %>% 
-  mutate(nsarea = gisland::geo_inside(shootlong, shootlat, ns_area, "AreaName") %>% as.integer())
+  mutate(nsarea = 
+           geo_inside(shootlong, shootlat, ns_area, "AreaName") %>% 
+           as.integer())
 ```
 
-We may also be interested in selecting data by ICES areas, hence:
+We may also be interested in analyzing the data by ICES areas, hence:
 ```{r, eval = FALSE}
 fao <- 
-  gisland::read_sf_ftp("fao-areas_nocoastline")
-library(sf)
+  read_sf_ftp("fao-areas_nocoastline") %>% 
+  as("Spatial")
 hh <-
   hh %>% 
-  mutate(faoarea = gisland::geo_inside(shootlong, shootlat, fao, "name"))
+  mutate(faoarea = geo_inside(shootlong, shootlat, fao, "name"))
 ```
-
-
 
 ### The length data
 
 The exchange format for the length related measurements is a bit messy. E.g.:
 
-* The species depends on a numerical code (SpecCode) whose meaning then depends on another variable (SpecCodeType). Then there is a third reference to species code (Valid_Aphia).
-* The unit of the variable length class (LngtClass) is different and is dependent on another variable (lngtcode).
+* The species depends on a numerical code (SpecCode) whose meaning then depends on another variable (SpecCodeType). Then there is a third reference to species code (Valid_Aphia) which presumable was derived from the other two variables. The last column is here used to derive the latin name of the species.
+* The unit of the variable length class (LngtClass) is different it being dependent on another variable (lngtcode).
 * The most confusing part is that the number of fish "measured" (HLNoAtLngt) is different, its meaning dependent on a variable (DataType) in the haul table.
 * Lastly, there are a lot of variables (27) in the raw length table, many of them really associated with the haul table and hence redundant.
 
@@ -101,11 +107,10 @@ A convenient functions, `tidy_hl` basically takes care of the above, it specific
 In order for this to complete its job, we need in addition to the raw hl-dataframe to pass the tidy haul-dataframe (because that is where the variable DataType is stored). And to convert the coded species information to Latin name we need to supply the proper "lookup" table (see dataframe species below):
 
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
-species <- read_rds("data/species.rda")
+species <- read_rds("data/species_worms.rds")
 hl <-
-  nsibts_raw$hl %>% 
-  tidyices::tidy_hl(hh, species) %>% 
-  select(-species)
+  raw$hl %>% 
+  tidy_hl(hh, species)
 ```
 
 So starting with the raw length dataframe containing 27 variables what is returned is a dataframe that contains only 5 variables, the haul id, the species name (Latin), sex, length (in centimeters) and the number of fish measured (n).
@@ -117,35 +122,28 @@ So starting with the raw length dataframe containing 27 variables what is return
 ```{r, eval = FALSE}
 ca <-
   nsibts_raw$ca %>% 
-  tidyices::tidy_ca(species = species) %>% 
-  select(-species)
+  tidyices::tidy_ca(species)
 ```
 
 ### Save stuff for later use
 
 ```{r, eval = FALSE}
-hh %>% write_rds("data/nsibts_hh.rds")
-hl %>% write_rds("data/nsibts_hl.rds")
-ca %>% write_rds("data/nsibts_ca.rds")
+hh %>% write_rds("data/ns-ibts_hh.rds")
+hl %>% write_rds("data/ns-ibts_hl.rds")
+ca %>% write_rds("data/ns-ibts_ca.rds")
 ```
 
 ## Get the whole mess
 
 The above code shows how to obtain the haul, length and age data for one survey. Since we may be interested in looking at more than one survey, the code below describes how to get all the survey data stored in the DATRAS database via a loop-script:
 
+### Downloading
+
 ```{r eval = FALSE}
-# Make sure the needed objects are available
-fao <- gisland::read_sf_ftp("fao-areas_nocoastline")
-ns_area <- gisland::read_sf_ftp("NS_IBTS_RF")
-species <- read_rds("data/species.rda")
-
-# Setup list objects to temporarily store the results
-res_hh <- res_hl <- res_ca <- list()
-
 # Get an overview of all the surveys
 dtrs <- icesDatras::getDatrasDataOverview()
 
-# Loop throug each survey
+# Loop through each survey, download and save ----------------------------------
 for(i in 1:length(dtrs)) { 
   
   sur <- names(dtrs[i])
@@ -155,7 +153,6 @@ for(i in 1:length(dtrs)) {
   # A error occurs in the NS-IBTS if all quarters are requested
   if(sur == "NS-IBTS") qts <- c(1, 3)
   
-  
   hh_raw <- 
     icesDatras::getDATRAS(record = "HH", survey = sur, years = yrs, quarters = qts)
   hl_raw <- 
@@ -164,28 +161,92 @@ for(i in 1:length(dtrs)) {
     icesDatras::getDATRAS(record = "CA", survey = sur, years = yrs, quarters = qts)
   list(hh = hh_raw, hl = hl_raw, ca = ca_raw) %>% 
     write_rds(path = paste0("data-raw/datras/", tolower(sur), "_raw.rds"))
+}
+```
+
+### Latin names of species codes
+
+```{r, eval = FALSE}
+# Get latin name from worms ----------------------------------------------------
+# TODO: Find a way to dplyrize the stuff
+
+# get a complete species code list from all the length data
+fil <- dir("data-raw/datras", full.names = TRUE)
+
+SP <- list()
+for(i in 1:length(fil)) {
+  #print(i)
+  x <-  read_rds(fil[i])$hl
+  if(!is.null(x)) {
+    SP[[i]] <-
+      x %>%
+      select(speccodetype = SpecCodeType,
+             speccode = SpecCode,
+             valid_aphia = Valid_Aphia) %>%
+      distinct() %>%
+      as_tibble()
+  }
+}
+SP <-
+  bind_rows(SP) %>%
+  distinct() %>%
+  mutate(id = 1:n()) %>% 
+  mutate(aphia = valid_aphia) %>%
+  mutate(aphia = ifelse(is.na(aphia) & speccodetype == "W",
+                        speccode,
+                        aphia))
+
+APHIA <- SP %>% select(aphia) %>% drop_na() %>% pull(aphia) %>% unique() %>% sort()
+from_worms <- 
+  wm_id2name_(id = APHIA) %>% 
+  bind_rows() %>%
+  gather(aphia, latin, convert = TRUE)
+SP %>%
+  left_join(from_worms) %>%
+  write_rds("data/species_worms.rds")
+```
+
+### Tidying
+
+```{r, eval = FALSE}
+# Tidy -------------------------------------------------------------------------
+# Make sure the needed objects are available
+fao <- gisland::read_sf_ftp("fao-areas_nocoastline") %>% as("Spatial")
+ns_area <- gisland::read_sf_ftp("NS_IBTS_RF") %>% as("Spatial")
+species <- 
+  read_rds("data/species_worms.rds") %>% 
+  select(aphia, latin) %>% 
+  drop_na()
+
+# Setup list objects to temporarily store the results
+res_hh <- res_hl <- res_ca <- list()
+
+# Loop through each survey
+for(i in 1:length(fil)) {
   
-  # tidy
+  raw <- read_rds(fil[i])
+  
+  sur <- raw$hh$Survey[1] %>% tolower()
+
   hh <-
-    hh_raw %>% 
-    tidyices::tidy_hh() %>% 
+    raw$hh %>% 
+    tidy_hh() %>% 
     mutate(nsarea = gisland::geo_inside(shootlong, shootlat, ns_area, "AreaName") %>% as.integer(),
            faoarea = gisland::geo_inside(shootlong, shootlat, fao, "name"))
-  if(!is.null(hl_raw)) {
+  
+  if(!is.null(raw$hl)) {
     hl <- 
-      hl_raw %>% 
-      tidyices::tidy_hl(hh, species) %>% 
-      select(-species)
+      raw$hl %>% 
+      tidy_hl(hh, species)
   }
-  if(!is.null(ca_raw)) {
+  if(!is.null(raw$ca)) {
     ca <-
-      ca_raw %>% 
-      tidyices::tidy_ca(species = species) %>% 
-      select(-species)
+      raw$ca %>% 
+      tidy_ca(species)
   }
-  hh %>% write_rds(paste0("data/", tolower(sur), "_hh.rds"))
-  if(!is.null(hl_raw)) hl %>% write_rds(paste0("data/", tolower(sur), "_hl.rds"))
-  if(!is.null(ca_raw)) ca %>% write_rds(paste0("data/", tolower(sur), "_ca.rds"))
+  hh %>% write_rds(paste0("data/", sur, "_hh.rds"))
+  if(!is.null(raw$hl)) hl %>% write_rds(paste0("data/", sur, "_hl.rds"))
+  if(!is.null(raw$ca)) ca %>% write_rds(paste0("data/", sur, "_ca.rds"))
   
   # temporary storage
   res_hh[[i]] <- hh
@@ -194,7 +255,7 @@ for(i in 1:length(dtrs)) {
 }
 
 
-# Binde the results into a dataframe and save for later retrieval
+# Bind all the DATRAS data and save for later retrieval
 res_hh %>% bind_rows() %>% write_rds("data/hh_datras.rds")
 res_hl %>% bind_rows() %>% write_rds("data/hl_datras.rds")
 res_ca %>% bind_rows() %>% write_rds("data/ca_datras.rds")

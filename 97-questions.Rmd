@@ -1,0 +1,34 @@
+# Questions
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r, eval = FALSE}
+library(tidyverse)
+library(tidyices)
+species <- read_rds("data/species.rds")
+hl <- 
+  read_rds("data-raw/datras/ns-ibts_raw.rds")$hl %>% 
+  as_tibble() %>% 
+  rename_all(. , tolower) %>% 
+  id_unite() %>% 
+  left_join(species)
+```
+
+#### If lngtclass is undefined, does that mean that species in question only counted at that station?
+
+
+```{r, eval = FALSE}
+d <- 
+  hl %>% 
+  filter(is.na(lngtclass)) %>% 
+  select(id, latin, sex:hlnoatlngt)
+d %>% 
+  glimpse()
+```
+
+* Rather than delete the records, would a remedy not be:
+    * set the lngtclass = 0
+    * set the hlnoatlngt = totalno
+
