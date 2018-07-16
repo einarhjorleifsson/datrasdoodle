@@ -1,4 +1,4 @@
-# Importing data {#import}
+# Importing DATRAS {#import}
 
 ```{r, warning = FALSE, message = FALSE}
 library(tidyverse)
@@ -14,7 +14,7 @@ library(worrms)
 
 ## Data download
 
-Download the raw data using the `getDATRAS` function from the [icesDatras](https://github.com/ices-tools-prod/icesDatras)-package and store it for later retrieval.
+With the advent of the [DATRAS webserver](https://datras.ices.dk/WebServices/Webservices.aspx) one has for some time been able to access the the DATRAS data programmatically rather than through the point-and-click [DATRAS download facilities](https://datras.ices.dk/Data_products/Download/Download_Data_public.aspx). The [icesDatras](https://github.com/ices-tools-prod/icesDatras)-package allows one to download and access the data directly in R via the `getDATRAS` function. The function is (currently) limited to only accessing one survey at the time, but multiple years and quarters can however be specified. In addition in its current form the haul dataframe (HH), the length data (HL) and the age data (CA) have to be called separately (TODO: Write a convenience function process this with only one function call?). The following code shows how one can access all the quarter 1 and 3 NS-IBTS data, here stored as a list in an R-binary file for later processing.
 
 ```{r, eval = FALSE}
 # not run
@@ -33,24 +33,44 @@ write_rds(raw, file = "data-raw/datras/ns-ibts_raw.rds")
 
 ## Data tidying
 
-TODO: Need to rewrite the code to reflect updates on species code handeling.
+The "exchange" data do not strictly fall under the umbrella of tidy dataframes (see: [Tidy Data](http://vita.had.co.nz/papers/tidy-data.pdf)). To make all subsequent coding more streamlined an a priori re-coding of the exchange dataframes is hence warranted.
 
-To load the data we have downloaded earlier one can read in the data by:
+To load the data downloaded earlier one can read in the data by:
 
-```{r, eval = FALSE}
+```{r}
 raw <- read_rds("data-raw/datras/ns-ibts_raw.rds")
 ```
+
+As stated above, the data is stored as a list. Lets check the names of the object:
+
+```{r}
+names(raw)
+```
+
+The names refer to the separate dataframes, the haul data (hh), the length data (hl) and the age data (ca). Each of the dataframes can be view by running the following code (not run):
+
+```{r, eval = FALSE}
+raw$hh %>% glimpse()
+raw$hl %>% glimpse()
+raw$ca %>% glimpse()
+```
+
+```{r, echo = FALSE}
+cn <- c(colnames(raw$hh), colnames(raw$hl), colnames(raw$ca))
+cn.unique <- cn %>% unique()
+```
+
+The three dataframes have in total `r length(cn)` columns but thankfully a lot of them are a repeat and hence redundant. Additional processing that is done here is explained in details below. At this moment it is not necessary for the novice user of DATRAS data to dig too much into the details of the tidying process, this could be revisited at a later stage. For those that have used the "exchange" data before, some readings into the details may be kosher.
 
 ### The haul data
 
 The haul dataframe contains one record per haul and is in a relatively tidy format. The total number of variables (61) may though be a bit overwhelming for routine abundance estimates. The function `tidy_hh` does the following:
 
-* Creates a unique key: The linkage to other dataframes is through the combined key of year, quarter, ship, gear and haulno. This combination of variable is unique within the haul-dataframe. In order to facilitate linkage the key variables are combined into a single variable named **id**. In the haul table the original variables are retained.
-* A datetime variable: Information of the date and time of haul shot are stored in four variables: year, month, day and timeshot. These variables are combined into a single **datetime** variable.
+* Creates a unique key: The linkage of the haul data to other tidied dataframes (length and age dataframes) will be through the combined key of year, quarter, ship, gear and haulno. This combination of variable is unique within the haul-dataframe. In order to facilitate linkage the key variables are combined into a single variable named **id**. In the haul table the original variables are retained.
+* A datetime variable: Information of the date and time of haul shot in the raw exchange data are stored in four variables: year, month, day and timeshot. While this may be understandable if once is concerned with cross-platform deliveries, within R these variables can be combined into a single variable, here named **datetime**.
 * By default, only selected variables are returned, these being: id, year,
 quarter, survey, ship, gear, haulno, date, country, depth, haulval, hauldur,
-shootlat, shootlong, haullat, haullong, statrec, daynight, datatype, stdspecreccode, bycspecreccode). If all variable are wished for in further processing, the argument all_variable in the `tidy_hh`-function can be set to TRUE.
-
+shootlat, shootlong, haullat, haullong, statrec, daynight, datatype, stdspecreccode, bycspecreccode). If all variable are wished for in further processing, the argument all_variable in the `tidy_hh`-function can be set to TRUE (the default setting is FALSE).
 
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
 hh <-
@@ -58,9 +78,21 @@ hh <-
   tidy_hh()
 ```
 
-#### Roundfish area
+#### Auxillary variable
 
-In this booklet the example code is largely based on the NS-IBTS data. In some of the steps the "Roundfish area" (LINK) is used. A new numerical variable is created that contains the numerical code of the "Roundfish area" that the haul belongs to by: 
+We are often interested in analyzing the data by ICES areas, hence one can add the a variable (here called faoarea) to the haul data, based on the shooting coordinates, using the following code (TODO: Provide a link that describes the details of this process - i.e. the geo_inside-function):
+```{r, eval = FALSE}
+# Read in the FAO area from the web:
+fao <- 
+  read_sf_ftp("fao-areas_nocoastline") %>% 
+  as("Spatial")
+# Find the faoarea attribute of each shooting location
+hh <-
+  hh %>% 
+  mutate(faoarea = geo_inside(shootlong, shootlat, fao, "name"))
+```
+
+TODO - MOVE THIS INTO A LATER SECTION: In this booklet the example code is largely based on the NS-IBTS data. In some of the steps the "[Roundfish area]{#nsrf}" is used. A new numerical variable is created that contains the numerical code of the "Roundfish area" that the haul belongs to by:
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
 ns_area <- 
   read_sf_ftp("NS_IBTS_RF") %>% 
@@ -72,21 +104,11 @@ hh <-
            as.integer())
 ```
 
-We may also be interested in analyzing the data by ICES areas, hence:
-```{r, eval = FALSE}
-fao <- 
-  read_sf_ftp("fao-areas_nocoastline") %>% 
-  as("Spatial")
-hh <-
-  hh %>% 
-  mutate(faoarea = geo_inside(shootlong, shootlat, fao, "name"))
-```
-
 ### The length data
 
-The exchange format for the length related measurements is a bit messy. E.g.:
+The exchange format of the length related measurements is a bit messy. E.g.:
 
-* The species depends on a numerical code (SpecCode) whose meaning then depends on another variable (SpecCodeType). Then there is a third reference to species code (Valid_Aphia) which presumable was derived from the other two variables. The last column is here used to derive the latin name of the species.
+* The species depends on a numerical code (SpecCode) whose meaning then depends on another variable (SpecCodeType). Then there is a third reference to species code (Valid_Aphia) which linkage to the other two variables is as of this writing unclear. The Valid_Aphia variable or if missing (NA) the SpecCode if SpecCodeType is "W" is used to derive the Latin name from [WoRMS](http://www.marinespecies.org). 
 * The unit of the variable length class (LngtClass) is different it being dependent on another variable (lngtcode).
 * The most confusing part is that the number of fish "measured" (HLNoAtLngt) is different, its meaning dependent on a variable (DataType) in the haul table.
 * Lastly, there are a lot of variables (27) in the raw length table, many of them really associated with the haul table and hence redundant.
@@ -94,26 +116,36 @@ The exchange format for the length related measurements is a bit messy. E.g.:
 A convenient functions, `tidy_hl` basically takes care of the above, it specifically doing:
 
 * Only distinct records (they are all distinct)
-* Filter out data were species code, length-code and length-class are undefined
+* Filter out data were species code, length-code and length-class are undefined (TODO: Check code)
 * Set lengths to millimeter. In the raw records:
 - If **lngtcode** is "1" then the **lngtclass** is in centimeters
 - If **lngtcode** is "." or "0" then the **lngclass** is in millimeters
 * Standardize the **haul numbers at length**. In the raw data:
 - If **datatype** in the station table is "C" then **hlnoatlngt** has been standardized to 60 minutes haul
 - If **datatype** in the station table is "R" then **hlnoatlngt** has not been standardized to 60 minutes haul
-* Get the Latin species name from the `sp`-table
+* Get the Latin species name from a `species`-table
 * Return only variable that are needed in further processing
 
-In order for this to complete its job, we need in addition to the raw hl-dataframe to pass the tidy haul-dataframe (because that is where the variable DataType is stored). And to convert the coded species information to Latin name we need to supply the proper "lookup" table (see dataframe species below):
+In order for this to complete its job, we need in addition to the raw hl-dataframe to pass the tidy haul-dataframe (because that is where the variable DataType is stored). And to convert the coded species information to Latin name we need to supply the proper "lookup" table (TODO: provide link the the auxiliary chapter explaining how one can obtain this from scratch rather via the temporary csv file):
 
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
-species <- read_rds("data/species_worms.rds")
+species <- read_csv("http://www.hafro.is/~einarhj/datrasdoodle/species.csv")
 hl <-
   raw$hl %>% 
   tidy_hl(hh, species)
 ```
 
-So starting with the raw length dataframe containing 27 variables what is returned is a dataframe that contains only 5 variables, the haul id, the species name (Latin), sex, length (in centimeters) and the number of fish measured (n).
+So starting with the raw length dataframe containing 27 variables what is returned is a dataframe that contains only 5 variables, the haul id, the species name (latin), sex, length (in centimeters) and the number of fish measured (n).
+
+```{r, echo = FALSE}
+hl <- read_rds("data/ns-ibts_hl.rds")
+```
+
+```{r}
+glimpse(hl)
+```
+
+NOTE: Sometimes only counts are in the hl-data (length NA), sometimes total weight etc. Need to cover that if possible and if not drop those records in the tidying.
 
 ### The age data
 
@@ -164,9 +196,9 @@ for(i in 1:length(dtrs)) {
 }
 ```
 
-### Latin names of species codes
+```{r, eval = FALSE, echo = FALSE}
+# NOTE: This has been moved to Auxillary section 
 
-```{r, eval = FALSE}
 # Get latin name from worms ----------------------------------------------------
 # TODO: Find a way to dplyrize the stuff
 
@@ -209,15 +241,12 @@ SP %>%
 ### Tidying
 
 ```{r, eval = FALSE}
-# Tidy -------------------------------------------------------------------------
 # Make sure the needed objects are available
 fao <- gisland::read_sf_ftp("fao-areas_nocoastline") %>% as("Spatial")
 ns_area <- gisland::read_sf_ftp("NS_IBTS_RF") %>% as("Spatial")
-species <- 
-  read_rds("data/species_worms.rds") %>% 
-  select(aphia, latin) %>% 
-  drop_na()
+species <- read_csv("http://www.hafro.is/~einarhj/datrasdoodle/species.csv")
 
+fil <- dir("data-raw/datras", full.names = TRUE)
 # Setup list objects to temporarily store the results
 res_hh <- res_hl <- res_ca <- list()
 
@@ -230,18 +259,23 @@ for(i in 1:length(fil)) {
 
   hh <-
     raw$hh %>% 
-    tidy_hh() %>% 
+    tidy_hh(all_variables = TRUE) %>% 
     mutate(nsarea = gisland::geo_inside(shootlong, shootlat, ns_area, "AreaName") %>% as.integer(),
-           faoarea = gisland::geo_inside(shootlong, shootlat, fao, "name"))
+           faoarea = gisland::geo_inside(shootlong, shootlat, fao, "name"),
+           # TODO: this should be part of the tidy-function
+           rigging = as.character(rigging),
+           stratum = as.character(stratum),
+           stno = as.character(stno),
+           hydrostno = as.character(hydrostno))
   
   if(!is.null(raw$hl)) {
-    hl <- 
-      raw$hl %>% 
+    hl <-
+      raw$hl %>%
       tidy_hl(hh, species)
   }
   if(!is.null(raw$ca)) {
     ca <-
-      raw$ca %>% 
+      raw$ca %>%
       tidy_ca(species)
   }
   hh %>% write_rds(paste0("data/", sur, "_hh.rds"))
@@ -261,3 +295,23 @@ res_hl %>% bind_rows() %>% write_rds("data/hl_datras.rds")
 res_ca %>% bind_rows() %>% write_rds("data/ca_datras.rds")
 ```
 
+## Recap
+
+In all its simplicity and with no extra frills the code to download, tidy and save one survey is as follows:
+```{r, eval = FALSE}
+spe <- read_csv("http://www.hafro.is/~einarhj/datrasdoodle/species.csv")
+sur <- "NS-IBTS"
+yrs <- 1965:2018
+qts <- c(1, 3)
+
+hh <- 
+  getDATRAS(record = "HH", survey = sur, years = yrs, quarters = qts) %>% 
+  tidy_hh()
+getDATRAS(record = "HL", survey = sur, years = yrs, quarters = qts) %>% 
+  tidy_hl(hh, spe) %>% 
+  write_rds("data/ns-ibts_hl.rds")
+getDATRAS(record = "CA", survey = sur, years = yrs, quarters = qts) %>% 
+  tidy_ca(spe) %>% 
+  write_rds("data/ns-ibts_ca.rds")
+hh %>% write_rds("data/ns-ibts_hh.rds")
+```

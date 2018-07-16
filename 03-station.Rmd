@@ -2,7 +2,7 @@
 
 ## Preamble
 
-Move from MK to KM.
+It assumed that you have already downloaded, tidied and saved some DATRAS data on your computer (see #import).
 
 It is recommended that every session in R is started by declaring/loading all the libraries needed to run the session:
 
@@ -28,7 +28,7 @@ hh <-
 
 ## Spatial overview
 
-Like most fisheries data survey data are spatial in nature. So it is only natural to start to attempt to get a spatial overview of the survey coverage. As long as we do not need to do some heavy computational (nice introduction to that is (Geocomputation with R)[https://geocompr.robinlovelace.net]) the ggplot2 framework provides seamless extensions when dealing with spatial plotting in R. Here we just jump into the deep end, but a little gentler introduction can e.g. be found [here](http://www.hafro.is/~einarhj/education/tcrenv2017/pre_ggplot2.html).
+Like most fisheries data survey data are spatial in nature. So it is only natural to start to attempt to get a spatial overview of the survey coverage. As long as we do not need to do some heavy computational calculations (nice introduction to that is [Geocomputation with R](https://geocompr.robinlovelace.net)) the ggplot2 framework provides some helpful remedies (read: functions) when dealing with spatial plotting in R. Here we just jump into the deep end, but a little gentler introduction can e.g. be found [Spatial plotting data with ggplot2](http://www.hafro.is/~einarhj/education/tcrenv2017/pre_ggplot2.html).
 
 Since in recent years at least both the start and end of the hauls are reported we can use the `geom_segment`-function to plot the haul track. The following scripts provides an overview of the data for one year by quarter and vessel:
 
@@ -55,7 +55,7 @@ hh %>%
 
 ### Gridding data
 
-One is often interested in getting an overview of the gridded data. Gridding is in effect the same thing as binning data when one generates a histogram except that it is two dimensional. For spatial data it is both the longitude and the latitude that is binned (for further background see: [On gridding spatial data](http://www.hafro.is/~einarhj/splatter/post/on-gridding-data/)).
+One is often interested in getting an overview of the data summaries based on some grids (e.g. ICES statistical rectangles). Gridding is in effect the same thing as binning data when one generates a histogram except that it is two dimensional - and then the nomenclature used is often "rasterization". For spatial data it is both the longitude and the latitude that is binned (for further background see: [On gridding spatial data](http://www.hafro.is/~einarhj/splatter/post/on-gridding-data/)).
 
 For gridding we will use here a "homemade" function `grade` that resides in the gisland-package (TODO: make link where installing the packages is illustrated). And here we will simply grid by using the ICES rectangle resolution (0.5 x 1.0 degrees) and then count the number of stations in each rectangle. Once done one can use the `geom_raster`-function to generate a spatial visualization:
 
@@ -113,11 +113,11 @@ d <-
   filter(haulval == "V",
          year == 2017) %>% 
   mutate(lon = grade(shootlong, 1),
-         lat = grade(shootlat, 0.5)) %>% 
+         lat = grade(shootlat, 0.5))
+d %>% 
   group_by(lon, lat) %>% 
   count() %>% 
-  mutate(n = ifelse(n >= 10, "10+", paste0(" ", n)))
-d %>% 
+  mutate(n = ifelse(n >= 10, "10+", paste0(" ", n))) %>% 
   ggplot() +
   geom_raster(aes(lon, lat, fill = n)) +
   geom_polygon(data = map_data("world"), aes(long, lat, group = group), fill = "grey") +
@@ -129,6 +129,26 @@ d %>%
 ```
 
 A little bit of caution here with the respect to the actual dimension of the ICES rectangles across large latitudinal range. TODO: Add the caution ...
+
+Besides simple counting on the number of records one can also derive various other statistics based on rectangles. The following code shows how to create a map of temperatures:
+
+```{r}
+d %>% 
+  mutate(bottemp = ifelse(bottemp == -9, NA_real_, bottemp),
+         surtemp = ifelse(surtemp == -9, NA_real_, surtemp)) %>% 
+  group_by(lon, lat) %>% 
+  summarise(m = mean(bottemp, na.rm = TRUE)) %>% 
+  ggplot() +
+  geom_raster(aes(lon, lat, fill = m)) +
+  geom_polygon(data = map_data("world"), aes(long, lat, group = group), fill = "grey") +
+  scale_fill_viridis_c(option = "B", direction = -1) +
+  coord_quickmap(xlim = range(d$lon), ylim = range(d$lat)) +
+  labs(x = NULL, y = NULL, fill = "n",
+       title = "DATRAS surveys",
+       subtitle = "Mean bottom temperature by ICES rectangles in 2017")
+```
+
+Note, no correction if made with respect to the survey season.
 
 ### Irregular shapes
 
@@ -166,8 +186,21 @@ p +
   geom_path(data = icesarea, aes(long, lat, group = group))
 ```
 
-
 ## Temporal overview
+
+```{r, fig.height = 9, fig.width=6}
+read_rds("data/hh_datras.rds") %>% 
+  select(survey, quarter, year) %>% 
+  distinct() %>% 
+  mutate(active = TRUE) %>% 
+  complete(survey, quarter, year) %>% 
+  ggplot(aes(year, quarter)) +
+  geom_tile(aes(fill = active), colour = "white", lwd = 0.5) +
+  facet_grid(survey ~ .) +
+  theme(legend.position = "none",panel.grid = element_blank()) +
+  coord_cartesian(expand = FALSE)
+```
+
 
 ```{r}
 hh %>% 

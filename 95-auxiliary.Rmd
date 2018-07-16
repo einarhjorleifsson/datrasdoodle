@@ -1,14 +1,14 @@
 # Auxiliary {#aux}
 
-## North sea roundfish area
 
-a little test in editing directly on github ...
 
 ```{r}
 library(tidyverse)
 library(gisland)
 ```
 
+
+## North sea roundfish area {#nsrf}
 
 ```{r, message = FALSE}
 read_sf_ftp("NS_IBTS_RF") %>% 
@@ -23,187 +23,65 @@ read_sf_ftp("NS_IBTS_RF") %>%
 ```
 
 
-## Species code
+## Species code {#spcode}
 
-In the Datras data the species are encoded. There are three columns associated with this identity:
+In the DATRAS data the species are encoded. There are three columns associated with this identity:
 
 * **speccode**: A integer code id for the species. The meaning of that value is dependent on the **speccodetype**.
 * **speccodetype**: A single character letter: 
-    - N: NODC code
+    - N: NODC code (EINAR: Think this is not used)
     - T: TSN code
     - W: WoRMS ApiaID code
 * **valid_aphia**: An integer code for the species
 
-Lets look at the 2 most common species in the length database by each speccodetype:
-```{r}
-hl <- 
-  read_rds("data-raw/datras/ns-ibts_raw.rds")$hl %>% 
-  rename_all(tolower)
+It is not clear at the time of this writing what processes are when Latin names ara assigned to the above species code sweeps of variables. The approach taken here is to use the [World Registry of Marine Species](http://www.marinespecies.org) often written as acronym WoRMS. Fortunately an R-library [worrms](https://github.com/ropensci/worrms) allows us to obtain the Latin names programatically.
 
-hl %>% 
-  group_by(speccodetype, speccode) %>% 
-  summarise(n = n()) %>%
-  arrange(desc(n)) %>% 
-  group_by(speccodetype) %>% 
-  slice(1:2)
-```
+Here the variable valid_aphia is the primary source, but in cases that is not specified (is NA) the speccode is used if the speccodetype is "W". We refer to this variable as aphia. Each numerical aphia value should have a unique Latin name. For convenience a complete lookup-table is generated based on the all the DATRAS data (as available in July 2018). The following code was used:
 
-**Does the valid_aphia not match speccode when speccodetype is "W"?**
-
-```{r}
-hl %>% 
-  filter(speccodetype == "W") %>% 
-  mutate(same = ifelse(speccode == valid_aphia, TRUE, FALSE)) %>% 
-  group_by(same) %>% 
-  count()
-```
-
-Not quite, but almost
-
-
-At the Datras home page there is an [API](https://datras.ices.dk/WebServices/DATRASWebService.asmx?op=getSpecies) that allows one to get the latin and common names that are associated with a species code given a species code type. Lets address this directly from within R, getting the name of the most common species in the list above:
-
-```{r}
-pfix <- 
-  "https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?"
-url <- 
-  paste0(pfix, "codename=tsn&code=164758")
-url %>% icesDatras:::readDatras() %>% icesDatras:::parseDatras()
-```
-
-In the url-string above the codename is specified as "tsn" because the speccodetype for the first record is labelled as "T" (WoRMS ApiaID code). If the codename had been "W" (WoRMS ApiaID code) we would need to specify "aphia" in the url-string:
-
-```{r}
-url <- 
-  paste0(pfix, "codename=aphia&code=126438")
-url %>% icesDatras:::readDatras() %>% icesDatras:::parseDatras()
-```
-
-So we have two codings for *Merlangius merlangus* in the length database. Before we proceed further we may want wrap the above into a function:
-
-```{r}
-get_species <- function(speccodetype, speccode) {
-  
-  pfix <- "https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename="
-  url <- paste0(pfix,
-                ifelse(speccodetype == "W",
-                       "aphia&code=",
-                       "tsn&code="),
-                speccode)
-  url %>% 
-    icesDatras:::readDatras() %>%
-    icesDatras:::parseDatras()
-  
-}
-```
-
-```{r}
-get_species("T", 172881)
-```
-
-So now we get two records for the same speccodetype and speccode combination, the distinction between them is two different versions of the english name. If we were only interested in getting the latin name we would modify the function slightly:
-
-```{r}
-get_species <- function(speccodetype, speccode) {
-  
-  pfix <- "https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename="
-  url <- paste0(pfix,
-                ifelse(speccodetype == "W",
-                       "aphia&code=",
-                       "tsn&code="),
-                speccode)
-  r <-
-    url %>% 
-    icesDatras:::readDatras() %>%
-    icesDatras:::parseDatras() 
-  if (!is.null(r)) {
-    r %>% 
-      select(latinname) %>% 
-      distinct() %>% 
-      pull() %>% 
-      return()
-  } else {
-    return("no response from api")
+```{r eval = FALSE}
+# List the available raw survey data files
+fil <- dir("data-raw/datras", full.names = TRUE)
+# Collate the aphia species code list, compiled from all available surveys
+SP <- list()
+for(i in 1:length(fil)) {       # loop through surveys
+  x <-  read_rds(fil[i])$hl
+  if(!is.null(x)) {
+    SP[[i]] <-
+      x %>%
+      select(speccodetype = SpecCodeType,
+             speccode = SpecCode,
+             valid_aphia = Valid_Aphia) %>%
+      distinct() %>%
+      as_tibble()
   }
-  
 }
+
+# Generate a vector of aphia code
+APHIA <-
+  bind_rows(SP) %>%
+  distinct() %>%
+  mutate(id = 1:n()) %>% 
+  mutate(aphia = valid_aphia) %>%
+  # if valid_aphia is NA then use speccode if speccodetype is W
+  mutate(aphia = ifelse(is.na(aphia) & speccodetype == "W",
+                        speccode,
+                        aphia)) %>% 
+  select(aphia) %>% 
+  drop_na() %>% 
+  # return a vector
+  pull(aphia) %>% 
+  unique() %>% 
+  sort()
+# Obtain a dataframe matching aphia with Latin name
+from_worms <- 
+  # You need an internet connection for this to work
+  wm_id2name_(id = APHIA) %>% 
+  bind_rows() %>%
+  gather(aphia, latin, convert = TRUE)
+from_worms %>% 
+  write_rds("data/species_worms.rds")
 ```
 
-Instead of addressing the API each time one wants to find the latin name of a species it may be more conventient to generate a specific R dataframe that we store locally on the computer. Following is the code used to generate the species table: 
-
-```{r, eval = FALSE}
-# Not run
-url <- "https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename=tsn&code=126438"
-out <- icesDatras:::readDatras(url)
-out <- icesDatras:::parseDatras(out)
-out
-
-all <- datras2::read_exchange("data-raw/Exchange_Data_2017-06-19_11_12_50.csv")
-sp <- 
-  all$HL %>% 
-  select(speccodetype, speccode) %>% 
-  distinct() %>% 
-  mutate(speccode = as.integer(speccode)) %>% 
-  filter(!is.na(speccode))
-tsn <- 
-  sp %>% 
-  filter(speccodetype == "T")
-tsn <- tsn$speccode
-
-out.tsn <- list()
-for(i in 1:length(tsn)) {
-  out.tsn[[i]] <- paste0("https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename=tsn&code=",
-                tsn[i]) %>% 
-    icesDatras:::readDatras() %>% 
-    icesDatras:::parseDatras()
-}
-
-aphia <- 
-  sp %>% 
-  filter(speccodetype == "W")
-aphia <- aphia$speccode
-
-out.aphia <- list()
-for(i in 1:length(aphia)) {
-  out.aphia[[i]] <- 
-    paste0("https://datras.ices.dk/WebServices/DATRASWebService.asmx/getSpecies?codename=aphia&code=",
-                aphia[i]) %>% 
-    icesDatras:::readDatras() %>% 
-    icesDatras:::parseDatras()
-}
-
-SPCODE <-
-  bind_rows(out.tsn) %>% 
-  bind_rows(bind_rows(out.aphia)) %>% 
-  tbl_df() %>% 
-  select(aphia, tsn, latin = latinname) %>% 
-  distinct() %>% 
-  arrange(latin) %>% 
-  gather(speccodetype, speccode, -latin) %>% 
-  mutate(speccodetype = ifelse(speccodetype == "aphia", "W", "T"),
-         speccode = as.character(speccode))
-
-SPCODE %>% filter(latin == "Pleuronectes platessa")
-
-write_csv(SPCODE, "data-raw/SPCODE.csv")
-```
-
-
-```{r, echo = FALSE, eval = FALSE}
-# Other trials (gives different results than above):
-# Not run when building book
-
-# Get all the species from the length data
-sp <- 
-  NSIBTS$le %>% 
-  filter(!is.na(speccode)) %>% 
-  select(speccodetype, speccode, specval) %>% 
-  distinct() %>% 
-  mutate(latin = NA_character_)
-for (i in 1:nrow(sp)) {
-  sp$latin[i] <- get_species(sp$speccodetype[i], sp$speccode[i])
-}
-```
 
 ## What is the meaning of each specval code?
 

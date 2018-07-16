@@ -19,7 +19,7 @@ hl <- read_rds("data/ns-ibts_hl.rds")
 
 ## Catch per haul
 
-Since the length data are standardized to 60 minutes it is easy to calculate the abundance per haul.
+Since the length data are standardized to 60 minutes it is easy to calculate the standardized abundance per haul.
 
 ```{r}
 by.haul <- 
@@ -30,7 +30,10 @@ by.haul <-
 
 In the code above we have basically collapsed the abundance by species and length going from `r nrow(hl)` observations) to `r nrow(by.haul)` observations. 
 
-Now the latter value only refers to the number of hauls where some fish was recorded, while the total number of stations in the full dataset is the number of rows in the `hh`-dataframe (`r nrow(hh)` hauls). The difference represents the number of zero stations. Now in order to include the stations with zero catch we simply do:
+Now the latter value only refers to the number of hauls where some fish was recorded (or rather where any length measurements where taken), while the total number of stations in the full dataset is the number of rows in the `hh`-dataframe (`r nrow(hh)` hauls). The difference represents the number of zero stations. Now in order to include the stations with zero catch we:
+
+* Take the haul data and do a left join with the length data which have some catch recorded
+* This results in the zero stations having NA in the n variable. Hence the mutate in combination with ifelse comes to the rescue, setting a value of zero as count for stations where no fish was caught otherwise retain the count value.
 
 ```{r}
 by.haul <-
@@ -44,7 +47,7 @@ A quick count:
 table(by.haul$haulval, by.haul$n == 0)
 ```
 
-reveals that we have 27577 valid hauls with fish and 131 valid hauls where no fish was caught.
+reveals that we have 27702 valid hauls with fish and 6 valid hauls where no fish was caught.
 
 Since we are here we may as well look at the temporal trend in the median abundance using only the valid hauls:
 
@@ -64,12 +67,13 @@ So we are talking about some 10-30 thousand fish being caught per 60 minutes hau
 ```{r}
 by.haul %>% 
   filter(haulval == "V") %>% 
+  # put the values above the 99%th percentile to 99%th percentile
   mutate(n = ifelse(n > quantile(n, 0.99), quantile(n, 0.99), n)) %>% 
   ggplot(aes(n)) +
   geom_histogram()
 ```
 
-The ggplot2 package has a very nice (but little known) summary statistics that comes to the rescue:
+The ggplot2 package has a very nice summary statistics that comes to the rescue:
 
 ```{r}
 by.haul %>% 
@@ -84,8 +88,7 @@ by.haul %>%
        subtitle = "Bootstrap mean and confidence interval")
 ```
 
-
-A minor tweaking in the code would also allow us to adress the question on the mean number of species that have been caught per haul (or is it only the mean of the species where length measurments are taken??) through time:
+A minor tweaking in the code would also allow us to address the question on the mean number of species that have been caught per haul (or is it only the mean of the species where length measurements are taken??) through time:
 ```{r}
 hh %>% 
   filter(haulval == "V") %>% 
