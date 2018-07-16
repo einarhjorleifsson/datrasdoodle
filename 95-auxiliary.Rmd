@@ -7,6 +7,57 @@ library(tidyverse)
 library(gisland)
 ```
 
+## geo_inside {#geoinside}
+
+One is often interested in establishing some georeference of some coordinate locations, such as whether a tow falls inside or outside a particular EEZ or which ICES area tows "belongs" to. Geospatial data such as EEZ or FAO areas are normally stored in a specific spatial format and hence ordinary dplyr-functions are not ...
+
+Lets first import e.g. the FAO areas (conveniently located at ftp://ftp.hafro.is/pub/reiknid/einar/shapes):
+
+```{r}
+fao <- read_sf_ftp("fao-areas_nocoastline")
+glimpse(fao)
+```
+
+The object here is of a special format (an sf-dataframe) with two variables, where name is the name of FAO area and the geometry is as special spatial format that contains the geometric polygon of each area.
+
+The objects contains the complete global FAO areas as can bee seen when we plot the object:
+```{r}
+plot(fao)
+```
+
+Lets filter the object such that it only contains the ICES areas (FAO area 27):
+
+```{r}
+fao <-
+  fao %>% 
+  filter(str_sub(name, 1, 2) == 27)
+```
+
+Lets generate some 500 random point coordinates:
+
+```{r}
+d <- 
+  data_frame(lon = runif(500, -44, 68.5),
+             lat = runif(500,  36, 89.9))
+```
+
+In order to establish the ICES area each of the 500 observations "belong to" we use a convenient function `geo_inside` that resides in the gisland-package:
+
+```{r}
+d <-
+  d %>% 
+  mutate(area = geo_inside(lon, lat, fao %>% as("Spatial"), "name")) 
+d %>% glimpse()
+```
+
+Here we have added a variable (area) that specifies name of the FAO area that each coordinate "belongs to". Lets plot it to get a better picture of what we have done:
+```{r}
+d %>% 
+  ggplot() +
+  geom_sf(data = fao) +
+  geom_point(aes(lon, lat, colour = area))
+ 
+```
 
 ## North sea roundfish area {#nsrf}
 

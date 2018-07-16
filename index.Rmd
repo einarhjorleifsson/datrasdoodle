@@ -8,7 +8,7 @@ output:
     fig_height: 6
     fig_width: 9
 documentclass: book
-bibliography: [book.bib, packages.bib]
+bibliography: [ddoodle.bib]
 biblio-style: apalike
 link-citations: yes
 github-repo: einarhjorleifsson/datrasdoodle
@@ -43,8 +43,8 @@ d %>%
   labs(colour = "Survey")
 ```
 
+
 The scribble that follows contains snapshots/examples of tidyverse code used for data exploration analysis of the DATRAS dataset.
 
-
-
+The scribbles are not to be considered as teaching the basics of the tidyverse, for that read the R for data science - @wickham2016r
 

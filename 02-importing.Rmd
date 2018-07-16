@@ -33,7 +33,7 @@ write_rds(raw, file = "data-raw/datras/ns-ibts_raw.rds")
 
 ## Data tidying
 
-The "exchange" data do not strictly fall under the umbrella of tidy dataframes (see: [Tidy Data](http://vita.had.co.nz/papers/tidy-data.pdf)). To make all subsequent coding more streamlined an a priori re-coding of the exchange dataframes is hence warranted.
+The "exchange" data do not strictly fall under the umbrella of tidy dataframes (see: [Tidy Data](http://vita.had.co.nz/papers/tidy-data.pdf)) - @wickham2014tidy. To make all subsequent coding more streamlined an a priori re-coding of the exchange dataframes is hence warranted.
 
 To load the data downloaded earlier one can read in the data by:
 
@@ -80,7 +80,7 @@ hh <-
 
 #### Auxillary variable
 
-We are often interested in analyzing the data by ICES areas, hence one can add the a variable (here called faoarea) to the haul data, based on the shooting coordinates, using the following code (TODO: Provide a link that describes the details of this process - i.e. the geo_inside-function):
+We are often interested in analyzing the data by ICES areas, hence one can add the a variable (here called faoarea) to the haul data, based on the shooting coordinates (link to some details of the  [geo_inside](#geoinside)-function):
 ```{r, eval = FALSE}
 # Read in the FAO area from the web:
 fao <- 

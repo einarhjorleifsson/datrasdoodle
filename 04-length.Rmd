@@ -19,7 +19,7 @@ hl <- read_rds("data/ns-ibts_hl.rds")
 
 ## Catch per haul
 
-Since the length data are standardized to 60 minutes it is easy to calculate the standardized abundance per haul.
+Since in the tidying process all length data were standardized to 60 minutes haul time it is easy to calculate the standardized abundance per haul.
 
 ```{r}
 by.haul <- 
@@ -41,6 +41,8 @@ by.haul <-
   left_join(by.haul) %>%
   mutate(n = ifelse(is.na(n), 0, n))
 ```
+
+A demonstration of the join-function family is provided in [link]
 
 A quick count:
 ```{r}
