@@ -59,6 +59,74 @@ d %>%
  
 ```
 
+## On joins {#joins}
+
+### left_join
+
+Lets take a simple case of haul data and length frequency measurements in different hauls. We limit ourselves to:
+
+* 3 hauls
+* 2 hauls where in one three length bins were recorded with fish, in the other four length bins were recorded.  The variable n is the number of fish that fall within each length bin
+
+So effectively we have 1 haul (here haul with the id = 2) where no fish was recorded
+
+```{r}
+hh <-
+  data_frame(id = 1:3)
+hl <-
+  data_frame(id = c(1, 1, 1, 3, 3, 3, 3),
+             length = runif(7, 20, 50) %>% round(),
+             n = runif(7, 1, 4) %>% round())
+```
+
+Now lets say we are only interested in calculating the abundance at each station. We would start by some code like the following:
+
+```{r}
+d <-
+  hl %>% 
+  group_by(id) %>% 
+  summarise(n = sum(n))
+d
+```
+
+Now if we were to calculate the mean abundance over all hauls on can not just do:
+```{r}
+d %>% summarise(m = mean(n))
+```
+
+because we would not be taking account of the zero fish caught in haul with id = 2.
+
+Hence we have to merge the counts from the length dataframe with the station dataframe. Something like this:
+```{r}
+hh %>% 
+  left_join(d)
+```
+
+Now, here haul 2 has the abundance variable assigned as NA. To get the mean abundance could try:
+```{r}
+hh %>% 
+  left_join(d) %>% 
+  summarise(m = mean(n))
+```
+
+This however generates an NA. One could try:
+```{r}
+hh %>% 
+  left_join(d) %>% 
+  summarise(m = mean(n, na.rm = TRUE))
+```
+
+But this would give us the mean of the positive stations (as we already obtained above). So effectively we have to assign a value of zero to the abundance when it is NA. The full pipeline would hence be:
+```{r}
+hh %>% 
+  left_join(hl) %>% 
+  mutate(n = ifelse(is.na(n), 0, n)) %>% 
+  group_by(id) %>% 
+  summarise(n = sum(n)) %>% 
+  summarise(m = mean(n))
+```
+
+
 ## North sea roundfish area {#nsrf}
 
 ```{r, message = FALSE}

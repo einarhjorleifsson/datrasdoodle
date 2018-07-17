@@ -42,7 +42,7 @@ by.haul <-
   mutate(n = ifelse(is.na(n), 0, n))
 ```
 
-A demonstration of the join-function family is provided in [link]
+A demonstration of the join-function family is provided using some simple data in [On joins](#joins}
 
 A quick count:
 ```{r}
@@ -72,10 +72,12 @@ by.haul %>%
   # put the values above the 99%th percentile to 99%th percentile
   mutate(n = ifelse(n > quantile(n, 0.99), quantile(n, 0.99), n)) %>% 
   ggplot(aes(n)) +
-  geom_histogram()
+  geom_histogram() +
+  labs(x = "Abundance per haul",
+       y = "Number of stations")
 ```
 
-The ggplot2 package has a very nice summary statistics that comes to the rescue:
+Here we have most hauls with relatively small catch with occational hauls with very large catches resulting in a highly negatively scewed distribution. The ggplot2 package has a very nice summary statistics (bootstrap mean and standard error) that comes to the rescue:
 
 ```{r}
 by.haul %>% 
@@ -107,37 +109,25 @@ hh %>%
        subtitle = "Bootstrap mean and confidence interval")
 ```
 
-
-## Size spectrum
-
-```{r}
-hl %>% 
-  mutate(length = floor(length)) %>% 
-  group_by(id, length) %>% 
-  summarise(n = mean(n)) %>% 
-  id_separate() %>% 
-  group_by(year, quarter, length) %>% 
-  summarise(m = mean(n)) %>% 
-  filter(quarter == 1,
-         #length <= 50,
-         year %in% seq(1980, 2020, by = 5)) %>% 
-  ggplot(aes(length, m, colour = factor(year))) +
-  geom_line() +
-  #scale_x_log10() +
-  scale_y_log10()
-```
-
-
+One can now obtain a quick overview of the catch distribution:
 
 ```{r}
+m <- map_data("world")
 by.haul %>% 
   filter(year == 2017) %>% 
-  ggplot(aes(shootlong, shootlat, size = n)) +
-  geom_point(colour = "red", alpha = 0.3) + 
+  ggplot() +
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  geom_point(aes(shootlong, shootlat, size = n),
+             colour = "red", alpha = 0.3) + 
   scale_size_area(max_size = 10) +
-  coord_quickmap() +
-  facet_wrap(~ quarter)
+  coord_quickmap(xlim = range(by.haul$shootlong), ylim = range(by.haul$shootlat)) +
+  facet_wrap(~ quarter) +
+  labs(x = NULL, y = NULL, size = "Abundance",
+       title = "NS-IBTS 2017",
+       subtitle = "Catch distribution - No. fish per 60 minute haul")
 ```
+
+If interested in rough biomass distribution the code can easily be ammended, using isometric length-weight relationship:
 
 ```{r}
 hh %>% 
@@ -145,12 +135,18 @@ hh %>%
               mutate(b = n * 0.00001 * length^3) %>% 
               group_by(id) %>% 
               summarise(b = sum(b))) %>% 
+  mutate(b = ifelse(is.na(b), 0, b)) %>% 
   filter(year == 2017) %>% 
-   ggplot(aes(shootlong, shootlat, size = b)) +
-  geom_point(colour = "red", alpha = 0.3) + 
+  ggplot() +
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  geom_point(aes(shootlong, shootlat, size = b),
+             colour = "red", alpha = 0.3) + 
   scale_size_area(max_size = 10) +
-  coord_quickmap() +
-  facet_wrap(~ quarter)
+  coord_quickmap(xlim = range(by.haul$shootlong), ylim = range(by.haul$shootlat)) +
+  facet_wrap(~ quarter) +
+  labs(x = NULL, y = NULL, size = "Biomass",
+       title = "NS-IBTS 2017",
+       subtitle = "Catch distribution - Kg per 60 minute haul")
 ```
 
 
