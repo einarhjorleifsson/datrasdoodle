@@ -1,0 +1,1981 @@
+# Appendix
+
+[WKIDP](http://www.ices.dk/sites/pub/Publication%20Reports/Expert%20Group%20Report/SSGESST/2014/WKIDP14.pdf)
+
+check out prj/2013_10datrasDataMining
+
+## ICES TRAWL SURVEY AND EVALUATION course
+
+An ICES r-course on the DATRAS data was held in the 20XX. The material can be found on [Google Code Archive](https://code.google.com/archive/p/datras). The course relied heavilily on an R-packages called DATRAS, located on the archieve site.
+
+Download practicals:
+
+```{r eval = FALSE}
+urlbase <- "https://storage.googleapis.com/google-code-archive-downloads/v2/code.google.com/datras/"
+n <- 1:5
+for(i in 1:5) {
+  download.file(url = paste0(urlbase, "Practical0", n[i], ".r"),
+                destfile = paste0("R/ices-course/Practical0", n[i], ".R"),
+                                  mode = "w")
+}
+```
+
+Download the package:
+
+```{r eval = FALSE}
+
+```
+
+
+### Practical 01
+
+```{r, eval = FALSE}
+#######################################################################################################################################################
+
+############# ICES TRAWL SURVEY AND EVALUATION course #################################################################################################
+
+################# Practical 01 - Exploring the Chrons ###########################################################################################################
+
+##################Doug Beare and Dave Reid  ##########################################################################################################
+
+## The aim of this exercise is download ICES exchange format data from www.ices.dk, extract and visualise the chron records.
+
+#######################################################################################################################################################
+## 1. Install R (http://cran.r-project.org/), packages and perhaps Tinn-R   (http://sourceforge.net/projects/tinn-r/).
+#######################################################################################################################################################
+
+install.packages('maps');        # Eg. install the packages. Remember you only need to do this once.
+install.packages('maptools');
+install.packages('rgdal');
+install.packages('sp');
+install.packages('spatial');
+install.packages('PBSmapping');
+
+
+library(sp);library(maptools);library(rgdal);library(maps);library(PBSmapping) # attach to search path
+
+#######################################################################################################################################################
+## 2. Select some data from the ICES website - http://datras.ices.dk/Data_products/Download/Download_Data_public.aspx
+ #######################################################################################################################################################
+
+#######################################################################################################################################################
+## 3. Save the data to a directory of your choice, eg. 'c:/datras/data' and extract them from the zip files.
+#######################################################################################################################################################
+
+#######################################################################################################################################################
+## 4. Install the R library datras. Do this by downloading datras*zip from the sharepoint. Open R, go to packages, install package from local zip files.
+#######################################################################################################################################################
+
+#######################################################################################################################################################
+## 5. Attach datras package written by me to the R search path
+ #######################################################################################################################################################
+
+library(datrasR)
+
+#######################################################################################################################################################
+## 6. Extract the chron records in the relevant directory. In the first instance chose a survey area in which you are interested. The suggestions
+#######################################################################################################################################################
+
+## below are simply options. Remember that you will need to adjust the working directory (wd) path so that R can find the data. The ICES website
+## only allows relatively small subsets of data to be downloaded at once. For the time-being stick to fairly small subsets of data.
+
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/RockallData")
+chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2010-2011")
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2005-2011")
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2001-2011-Q1")
+
+
+#######################################################################################################################################################
+## 7. Here only examine valid hauls, non-duplicates and hauls where we have both shoot and haul positions.
+#######################################################################################################################################################
+
+chrons <- chrons[chrons$haulval=='V',]          # only valid hauls
+
+chrons <- chrons[!duplicated(chrons),]          # chuck any duplicates
+
+chrons <- chrons[!is.na(chrons$haullong),]      # don't want data without haul longs
+
+chrons <- chrons[chrons$country != 'NOR',]      # throw out Norway because shoot and haul positions are the same.
+
+#######################################################################################################################################################
+## 8. Print and examine first 5 lines of chron file 
+#######################################################################################################################################################
+
+head (chrons)
+
+#######################################################################################################################################################
+## 9. Explore the data with R function table
+#######################################################################################################################################################
+
+table(chrons$haulval)                                             # number of valid hauls (check)
+table(chrons$hauldur)                                             # number of hauls at different durations
+table(chrons$gear)                                                # number of gears
+table(chrons$quarter,chrons$year)                                 # number of hauls by year and quarter
+table(chrons$country,chrons$ship)                                 # number of hauls by country and ship
+table(chrons$daynight,chrons$depth)                               # number of hauls by day/night and depth                                   
+table(chrons$ship,cut(chrons$depth,breaks=c(seq(0,250,by=25))))   # number of hauls by ship and depth bin.
+table(chrons$statrec,as.character(chrons$ship))                   # number of hauls by statistical rectangle and ship
+table(chrons$year)                                                # number of hauls by year
+
+#######################################################################################################################################################
+## 10. Some simply summary statistics
+#######################################################################################################################################################
+
+summary(chrons$depth)
+summary(chrons$hauldur)
+summary(chrons$datim.shot)
+
+#######################################################################################################################################################
+## 11. average temperature (if available) in each statrectangle.
+#######################################################################################################################################################
+
+tapply(chrons$surtemp,list(chrons$quarter,chrons$statrec),mean,na.rm=T)
+
+#######################################################################################################################################################
+## 12. average depth (if available) in each statrectangle.
+ #######################################################################################################################################################
+
+tapply(chrons$depth,list(chrons$quarter,chrons$statrec),mean,na.rm=T)
+
+#######################################################################################################################################################
+## 13. average number, duration and distance of hauls in ICES area
+#######################################################################################################################################################
+
+chrons$ices_area <- ICESarea(chrons,roman=F)                                    # Add on ICES area using function datras
+
+tapply(chrons$hauldur,chrons$ices_area,length)                                  # number of hauls in each ICES area
+round(tapply(chrons$hauldur,chrons$ices_area,sum,na.rm=T)/60)                   # total haul duration in each ICES area
+round(tapply(chrons$distance,chrons$ices_area,sum,na.rm=T)/1000)                # total distance hauled in each ICES area
+
+#######################################################################################################################################################
+## 14. You might want to write data out into a csv file for reading with excel or some other software
+ #######################################################################################################################################################
+
+write.table(chrons,file='chrons.csv',sep=',',row.names=F)
+
+#######################################################################################################################################################
+## 15. Explore the data with graphs
+#######################################################################################################################################################
+
+# Simple map of shoot and haul locations
+
+par(mfrow=c(1,1))
+plot(chrons$shootlong,chrons$shootlat,pch=".",col='blue',ylab='',xlab='',cex=2)
+# add points
+points(chrons$haullong,chrons$haullat,pch=".",col='red',cex=2)
+# add lines for stat rectangles
+abline(h=0:80,v=seq(-30,30,by=.5),lty=2,col='grey',lwd=.5)
+# add map
+library(maps)
+map('worldHires',add=T,col='darkseagreen',fill=T)   
+
+
+
+# Add depth contours (different files for different areas since the data sets are so big).
+
+data(nseaBathy)   # north sea bathymetry
+data(nwestBathy)  # north west atlantic shelf bathymetry
+data(balticBathy) # baltic sea bathymetry
+
+contour(nseaBathy$x,nseaBathy$y,nseaBathy$z,levels=c(20,40,60,100),add=T) # add on depth contours for north sea
+contour(nwestBathy$x,nwestBathy$y,nwestBathy$z,levels=c(100,200,500),add=T)  # add on depth contours for baltic
+
+#######################################################################################################################################################
+## 16. Explore data in various ways looking for potential confounding ###
+#######################################################################################################################################################
+
+what.quarter <- 3 # remember to add on the correct quarter you are examining
+
+chrons1 <- chrons[chrons$quarter == what.quarter,]
+par(mfrow=c(1,2),mar=c(4,4,2,2))
+plot(chrons1$shootlong,chrons1$shootlat,pch=16,col='blue',ylab='',xlab='')  # just shoot long
+# add lines for stat rectangles
+abline(h=0:80,v=seq(-30,30,by=.5),lty=2,col='grey')
+# add map
+library(maps)
+map('world',add=T,col='green',fill=T)   # low res map. Try 'worldHires' too.
+tt <- tapply(chrons1$depth,format(chrons1$datim.shot,"%H"),median,na.rm=T) # calculate mean depths at different times of day
+plot(as.numeric(names(tt)),tt,type='l',ylab="average depth",xlab="time of day")
+
+
+## Plot the survey by year
+
+chrons1 <- chrons[chrons$quarter == what.quarter,]  # extract data according to what.quarter
+
+uy <- sort(unique(chrons$year))
+
+print(uy)
+
+print(length(uy))                # how many unique years in the chron file ??
+
+par(mfrow=c(3,5),mar=c(2,2,2,2)) # use the result of print(length(uy)) to set up plot for number of graphs. Remember mfrow=c(3,4) means 'plot 12 graphs'
+
+
+for (i in uy){
+plot(chrons1$shootlong[chrons1$year == i],chrons1$shootlat[chrons1$year==i],pch=16,col='blue',ylab='',xlab='')
+# add points
+#points(jitter(chrons1$haullong),jitter(chrons1$haullat),pch=16,col='red')
+# add lines for stat rectangles
+abline(h=0:80,v=seq(-30,30,by=.5),lty=2,col='grey')
+# add map
+library(maps)
+map('world',add=T,col='green',fill=T)   # low res map. Try 'worldHires' too.
+title(as.character(i))
+}
+
+# Comment on the distribution of the survey stations 
+
+#######################################################################################################################################################
+## 17. Find chrons within a polygon.  Note: The 'polygon' can also come from a shapefile.
+#######################################################################################################################################################
+
+# First create a data frame with the Round 3 Zone 5 Boundary Co-ordinates (a proposed area for an offshore wind farm).
+
+dat.r3 <- data.frame (
+lon.d=c(3,3,2,2,2,1,1,2,2,2),
+lon.m=c(4,10,27,6,8,52,55,13,14,2),
+lon.s=c(15.035,46.476,11.669,56.469,30.217,6.891,56.591,32.66,29.436,40.5),
+lat.d=c(53,52,51,52,52,52,52,52,52,52),
+lat.m=c(14,51,59,0,17,15,24,26,36,49),
+lat.s=c(46.991,46.076,49.19,33.467,25.312,57.710,7.55,12.405,1.973,33.309))
+
+# Convert to decimal lat and long co-ordinates 
+
+x <- ((dat.r3$lon.m*60)+dat.r3$lon.s)/3600
+dat.r3$lon <- dat.r3$lon.d+x
+y <- ((dat.r3$lat.m*60)+dat.r3$lat.s)/3600
+dat.r3$lat <- dat.r3$lat.d+y
+
+
+# Create polyset data.frame (from PBSmapping but there are many other alternatives). 
+
+round.3  <- data.frame(PID=rep(1,11), POS=1:11,X=c(dat.r3$lon,dat.r3$lon[1]),Y=c(dat.r3$lat,dat.r3$lat[1]))
+round.3  <- as.PolySet(round.3,projection='UTM')
+
+head(round.3) # examine data (typical method for storage of spatial data). 
+
+data(europa)  # map of europe (with a detailed Dutch coastline) included in the package datras
+
+par(mfrow=c(1,1))
+
+plotMap(europa,xlim=c(-1,5),ylim=c(50,54),col='darkgreen',xlab='',ylab='')
+addLines(round.3,lwd=2)
+addPolys(round.3,col='red')
+points(chrons$shootlong,chrons$shootlat,pch=".",cex=2)
+
+# Identify the points within the polygon
+
+events <- data.frame(EID=1:length(chrons[,1]),X=chrons$shootlong,Y=chrons$shootlat) # Must first creat an events data frame
+events <- as.EventData(events,projection="UTM")
+r3<-findPolys(events,round.3,maxRows=1e+06)
+
+print(r3) #examine the output
+
+points(chrons$shootlong[r3$EID],chrons$shootlat[r3$EID],col='blue',pch='*')   # plot points INSIDE the polygon
+points(chrons$shootlong[-r3$EID],chrons$shootlat[-r3$EID],col='black',pch='+')   # plot points OUTSIDE the polygon
+
+#######################################################################################################################################################
+## 18. Create and plot points and tow tracks using R library sp. Output the result as kml (Google Earth) and shapefiles.
+#######################################################################################################################################################
+
+
+spDF <- Chrons2SpatialPointsDF(data=chrons) # Convert the data to a spatial points data.frame
+
+# Plot map in R
+
+data(europa) # in built map
+plotMap(europa,xlim=c(-15,10),ylim=c(47,62),xlab='',ylab='')  # Note: change xlim and ylim to focus in on correct area.
+points(spDF,pch=".",col='red',cex=2)
+
+# The magic of Google Earth. Note you can change the driver for other formats. 
+
+writeOGR(obj=spDF, dsn="chrons.kml", layer="shoot-locations", driver="KML") 
+writeOGR(obj=spDF, dsn="chrons.shp", layer="shoot-locations", driver="ESRI Shapefile")  # A shapefile.
+
+print(getwd())  # see which directory the file has gone too, find it and open it in Google Earth 
+
+# Similarly tow tracks instead of points
+
+uships <- unique(chrons$ship) # how many unique ships in the dataset ? 
+
+print(uships)
+
+spLDF <- ChronsTrack2SpatialLineDF(input=chrons,what.ship = c("TRI2"))   # convert to a spatial line data frame for a particular ship. Note the function takes too long if you select too many ships/data.
+
+
+par(mfrow=c(1,1))
+plotMap(europa,xlim=c(-5,10),ylim=c(47,62),xlab='',ylab='',col='darkseagreen')  #  Plot to see 
+lines(spLDF,col='blue',lwd=1)
+
+writeOGR(spLDF, "towtracks.kml", "tracks", "KML") 
+
+print(getwd())  # see which directory the file has gone too, find it and open file towtracks.kml in Google Earth 
+
+
+#######################  FURTHER EXERCISES ####################################
+
+ # Explore chron files from different datasets downloaded from ICES website. 
+ # Make your own polygons for selecting data.
+ # Find examples of 'confounding'/non-random sampling in survey data and share them with the group at Plenary, eg. create maps with dots color-coded for different ships, gears, etc. 
+```
+
+### Practical 02
+
+```{r eval = FALSE}
+
+######################################################################################################################################################
+
+############# ICES TRAWL SURVEY AND EVALUATION course #################################################################################################
+
+################# Practical 02 - Exploring the Length-Frequencies ###########################################################################################################
+
+################## Doug Beare and Dave Reid   ##########################################################################################################
+
+# The aim of this exercise is download ICES exchange format data from www.ices.dk, extract, analyse and visualise the length-frequency data for individual species.
+
+######################################################################################################################################################
+## 1. Install R (http://cran.r-project.org/), packages  and Tinn-R (http://sourceforge.net/projects/tinn-r/) ##
+######################################################################################################################################################
+
+
+#install.packages('maps');
+#install.packages('maptools');
+#install.packages('rgdal');
+#install.packages('sp');
+#install.packages('spatial');
+#install.packages('rgdal');
+#install.packages('fields');
+#
+library(sp);library(mda);library(doBy);library(PBSmapping);library(maps);library(maptools);library(rgdal);library(spatial);library(fields)  # attach to R search path
+
+######################################################################################################################################################
+## 2. Select some data from the ICES website - http://datras.ices.dk/Data_products/Download/Download_Data_public.aspx
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 3. Save the data to a directory of your choice, eg. 'c:/datras/data' and extract them from the zip files.
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 4. Install the R library datras. Do this by downloading datras*zip from the sharepoint. Open R, go to packages, install package from local zip files.
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 5. Attach datrasR package to search path
+######################################################################################################################################################
+
+library(datrasR)
+
+#######################################################################################################################################################
+## 6. Extract the length-frequency data in the relevant directory
+ ######################################################################################################################################################
+
+#lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/RockallData")
+#lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+#lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2010-2011")
+lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2005-2011")
+#lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2001-2011-Q1")
+
+######################################################################################################################################################
+## 7. Add on scientific name using TSN (downloaded from ITIS website). 
+######################################################################################################################################################
+
+data(tsn)  # itis database of all species in the world
+
+head(tsn)  # first 5 lines
+
+lfs$scientific.name <- as.character(tsn$completename[match(lfs$speccode,tsn$tsn)])   # match scientific names using tsn 
+
+unique(lfs$scientific.name) # print all fish species in the data set. 
+
+#####################################################################################################################################################
+## 8. Tidy up the data
+#####################################################################################################################################################
+
+lfs <- lfs[!duplicated(lfs),]                  #  remove any duplicates
+lfs <- lfs[lfs$speccode != -9,]                #  remove missing species codes
+lfs <- lfs[lfs$lngtclass != -9,]               #  remove missing length classes
+lfs <- lfs[!is.na(lfs$lngtclass),]             #  remove missing length classes
+lfs <- lfs[!is.na(lfs$lngtcode),]              #  remove missing length codes
+lfs <- lfs[!is.na(lfs$scientific.name),]       #  remove any missing scientific names 
+lfs$hlnoatlngt <- lfs$hlnoatlngt*lfs$subfact   #  Multiply by the subfactor
+
+#####################################################################################################################################################
+## 9. Standardise length codes to cms (some are in mms) and create bins of 0.5.
+#####################################################################################################################################################
+
+table(lfs$lngtcode)
+
+lfs$lngtclass[lfs$lngtcode == "."] <- lfs$lngtclass[lfs$lngtcode == '.']/10
+lfs$lngtclass[lfs$lngtcode == "0"] <- lfs$lngtclass[lfs$lngtcode == "0"]/10
+
+lfs$lngtclass <- floor(lfs$lngtclass)  #Round length down and add 0.5
+lfs$lngtclass <- lfs$lngtclass+0.5
+
+#####################################################################################################################################################
+## 10. Estimate weight of each fish.
+#####################################################################################################################################################
+
+# Note: It can be useful to quote results in terms of weight rather than numbers.
+# This is usually done with parameters (a & b) from non-linear equations where
+# Weight in grammes = aL^b  where L = length.
+
+data(length.weight)   # attach a list of parameters courtesy of IMARES and Marine Science Scotland.
+
+# Match a and b parameters onto the correct species
+
+lfs$a <- length.weight$a[match(lfs$scientific.name,length.weight$scientific.name)]
+lfs$b <- length.weight$b[match(lfs$scientific.name,length.weight$scientific.name)]
+
+lfs$hlwtatlngt<-((lfs$a*lfs$lngtclass^lfs$b)*lfs$hlnoatlngt) /1000    # calculate weight in kilos 
+
+print(head(lfs))   # are the weights reasonable ?
+
+#####################################################################################################################################################
+##  11. Extract a species. These are just examples but you can let your curiosity roam freely! 
+#####################################################################################################################################################
+
+#cod <- lfs[lfs$scientific.name == 'Gadus morhua',]
+#spurdog <- lfs[lfs$scientific.name == 'Squalus acanthias',]
+#angler <- lfs[lfs$scientific.name == 'Lophius piscatorius',]
+#turbot <- lfs[lfs$scientific.name == 'Psetta maxima',]
+plaice <- lfs[lfs$scientific.name == 'Pleuronectes platessa',]
+#dab    <- lfs[lfs$scientific.name == 'Limanda limanda',]
+#brill  <- lfs[lfs$scientific.name == 'Scophthalmus rhombus',]
+#lemon  <- lfs[lfs$scientific.name == 'Microstomus kitt',]
+#haddock <-lfs[lfs$scientific.name == 'Melanogrammus aeglefinus',]
+#
+# plot some distributions 
+
+barplot(table(rep(plaice$lngtclass,plaice$hlnoatlngt)),space=0   )  # these are the entire distributions for all the fish in the data you chose
+#barplot(table(rep(angler$lngtclass,angler$hlnoatlngt)),space=0   )
+#barplot(table(rep(cod$lngtclass,cod$hlnoatlngt)),space=0)
+
+#####################################################################################################################################################
+##  12. Merge lfs with the chrons. One reason is that only the +ve part of the lf data are typically stored and you need a complete list of stations to find the zero hauls.
+#####################################################################################################################################################
+
+# Get the chrons for the same survey (e.g. Practical01)
+
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/RockallData")
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2010-2011")
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2001-2011-Q1")
+chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2005-2011")
+
+# Tidy up the chrons
+
+chrons <- chrons[chrons$haulval=='V',]          #only valid hauls
+chrons <- chrons[!duplicated(chrons),]          # chuck any duplicates
+
+# Do the merging, ie. merge the positive component (the length frequencies) with the chrons. The result is a file which has zeros where you did
+# a haul but caught none.
+
+#merged.turbot  <- mergeChronsLfs(chrons=chrons,length.frequencies=turbot)
+merged.plaice  <- mergeChronsLfs(chrons=chrons,length.frequencies=plaice)
+#merged.spurdog <- mergeChronsLfs(chrons=chrons,length.frequencies=spurdog)
+#merged.lemon   <- mergeChronsLfs(chrons=chrons,length.frequencies=lemon)
+#merged.dab     <- mergeChronsLfs(chrons=chrons,length.frequencies=dab)
+#merged.brill   <- mergeChronsLfs(chrons=chrons,length.frequencies=brill)
+#merged.angler  <- mergeChronsLfs(chrons=chrons,length.frequencies=angler)
+#merged.cod     <- mergeChronsLfs(chrons=chrons,length.frequencies=cod)
+#merged.haddock <- mergeChronsLfs(chrons=chrons,length.frequencies=haddock)
+
+#####################################################################################################################################################
+##  13. Always useful to examine plots of length frequencies and/or probability density functions by year  (why ?) 
+#####################################################################################################################################################
+
+#fdat <- merged.cod
+fdat <- merged.plaice
+#fdat <- merged.angler
+#fdat <- merged.haddock
+#
+table(chrons$year,chrons$quarter)   # find range of data 
+
+par(mar=c(3,3,1,1),oma=c(3,3,3,3),mfcol=c(5,3))
+plot.Lfs(fish=fdat,what.quarter="3",chrons1=chrons)             #e.g plot the length frequencies
+
+plot.PDensity(fish=fdat,what.quarter="3",chrons1=chrons,bw=.5)   #e.g plot the density function
+                                                                     
+
+#####################################################################################################################################
+## 14. Plot CPUE by year and quarter  
+#####################################################################################################################################
+
+# Note: In my opinion it is always preferable to keep catch and effort databases separate, chose level of aggregation, aggregate over that level and then
+# divide the catch by the effort.
+
+fish <- merged.plaice
+
+fish <-fish[!is.na(fish$haullong),]     # sometimes there are incomplete chron records.
+
+fish$cpue.by.n  <- fish$hlno/fish$hauldur # divide catch by effort (n)
+fish$cpue.by.wt <- fish$hlwt/fish$hauldur # divide catch by effort (weight)
+
+nfish <- aggregate(list(cpue.by.n=fish$cpue.by.n,cpue.by.wt=fish$cpue.by.wt),
+list(year=fish$year,quarter=fish$quarter),mean,na.rm=T)     # average cpues caught over year and quarter. Is this correct ??
+
+
+# Put on absolute time (qtrend).
+
+nfish$qtrend <- qtrend.f(nfish$year,nfish$quarter,start.year=min(nfish$year))
+
+par(mfrow=c(2,1),mar=c(2,4,2,2))
+plot(nfish$qtrend,nfish$cpue.by.n,type='b',xlab='time',ylab='cpue',xaxt='n');title('cpue by n')
+axis(side=1,at=nfish$qtrend,labels=as.character(nfish$year))
+plot(nfish$qtrend,nfish$cpue.by.wt,type='b',xlab='time',ylab='cpue',xaxt='n');title('cpue by wt')
+axis(side=1,at=nfish$qtrend,labels=as.character(nfish$year))
+
+#####################################################################################################################################
+## 15. Map total numbers of individuals caught and/or weights
+#####################################################################################################################################
+
+#####################################################################################################################################
+# How about Bubble plots?
+#####################################################################################################################################
+
+# Select data (species) 
+
+fish <- merged.plaice   # chose plaice or whatever
+#fish <- merged.dab
+#fish <- merged.angler
+#fish <- merged.cod
+#fish <- merged.haddock
+
+fish <-fish[!is.na(fish$haullong),]      # sometimes there are incomplete chron records.
+
+fish$cpue.by.n  <- fish$hlno/fish$hauldur # divide catch by effort (n)
+fish$cpue.by.wt <- fish$hlwt/fish$hauldur # divide catch by effort (weight)
+
+nfish2 <- aggregate(list(cpue.by.n=fish$cpue.by.n,cpue.by.wt=fish$cpue.by.wt),
+list(scientific.name=fish$scientific.name,year=fish$year,quarter=fish$quarter,shootlat=fish$shootlat,shootlong=fish$shootlong),mean,na.rm=T) # average cpues caught over year and quarter
+
+table(nfish2$year,nfish2$quarter)         # investigate the range of the data to get year quarter combination to plot
+
+par(mfrow=c(1,1))                         # plot data for quarter 3 2007
+plotMapBlobs(input=nfish2,what.year=2007,what.quarter=3,what.cpue='cpue.by.n',xlim0=c(-15,15),ylim0=c(48,62),scaling.factor=.5)
+
+## Compare spatial distributions among groups of years
+
+print(sort(unique(nfish2$year)))  # how many years ? adjust mfrow accordingly & remember correct quarter argument
+
+par(mfrow=c(2,2),cex.main=.8)
+for(i in 2007:2010){
+plotMapBlobs(input=nfish2,what.year=i,what.quarter=3,what.cpue='cpue.by.n',xlim0=c(-2,8),ylim0=c(48,62),scaling.factor=.5) 
+}
+
+####################################################################################################################################
+## Grid of colors scaled to abundance
+####################################################################################################################################
+
+## Note: same thing here. We want to first chose our level of aggregation, sum the numbers or weights over it and then the same for effort dividing one by the other.
+
+fish <- merged.plaice    # Chose the species
+#fish <- merged.dab
+#fish <- merged.angler
+#fish <- merged.cod
+#fish <- merged.haddock
+#
+
+fish <-fish[!is.na(fish$haullong),]     # sometimes there are incomplete chron records.
+
+
+grid.size.y <- 0.5 # grid size here is ICES statistical rectangle but this is entirely flexible depending on the resolution of your survey
+grid.size.x <- 1  
+
+we <- -16             # Set east and west boundaries for your grid
+ea <- 10
+so <- 48
+no <- 62
+
+par(mfrow=c(1,1))    # number of plots
+
+# Take out dat for 1 year and 1 quarter
+
+table(chrons$year,chrons$quarter) # examine distribution of observations using the chron data
+
+what.year <- 2010
+what.quarter <- 3
+
+fish.yq <- fish[fish$quarter== what.quarter & fish$year == what.year,]         # create new dataset with selected year and quarter
+chrons.yq <- chrons[chrons$quarter== what.quarter & chrons$year == what.year,] # create new dataset with selected year and quarter
+
+# maps of total weights
+
+wts <-TrawlSurveyGridPlot(fish.yq, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
+nameVarToSum="hlwtatlngt",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
+legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",addICESgrid=TRUE,legendtitle="weights")
+
+# maps of total numbers
+
+nos <-TrawlSurveyGridPlot(fish.yq, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
+nameVarToSum="hlnoatlngt",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
+legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",outGridFile="text.txt",addICESgrid=TRUE,legendtitle="numbers")
+
+# map of trawling effort from chron files
+
+effort<-TrawlSurveyGridPlot(chrons.yq, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
+nameVarToSum="hauldur",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
+legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats="heat.colors",addICESgrid=TRUE,legendtitle="minutes trawled")
+
+
+# Cpue using the output from TrawlSurveyGridPlot
+
+im.nos <-  as.image.SpatialGridDataFrame(nos, attr=2)     # extract nos from output of TrawlSurveyGridPlot
+im.eff <-  as.image.SpatialGridDataFrame(effort, attr=2)  # extract effort from output of TrawlSurveyGridPlot
+
+im.cpue <- im.nos
+im.cpue$z <- im.nos$z/im.eff$z                             # divide catch by effort
+
+
+data(nseaBathy)    # North Sea
+data(nwestBathy)   # North west
+
+library(fields)
+
+image.plot(im.nos$x,im.cpue$y,log(im.cpue$z+1),col=topo.colors(10),xlab='',ylab='',xlim=c(-5,8))                     # plot the data on a map
+contour(nseaBathy$x,nseaBathy$y,nseaBathy$z,add=T,level=c(20,40,60),col='black')         # add on depth contour
+contour(nwestBathy$x,nwestBathy$y,nwestBathy$z,add=T,level=c(100,200,500,1000,2000,4000),col='black') 
+
+map("worldHires", add=TRUE, col='darkseagreen', fill=TRUE, bg="white",
+regions=c('uk','ireland','france','germany','netherlands', 'norway','belgium',
+'spain','luxembourg','denmark', 'sweden','iceland', 'portugal','italy','sicily','ussr','sardinia','albania','monaco','turkey','austria',
+'switzerland','czechoslovakia','finland','libya', 'hungary','yugoslavia','poland','greece','romania','bulgaria', 'slovakia','morocco',
+'tunisia','algeria','egypt' ))
+
+
+
+#######################  FURTHER EXERCISES ####################################
+
+ # Explore length frequency data for different species from different datasets downloaded from ICES website. 
+ # Compare distributions of fish species from different areas accross Europe.
+ 
+#######################  FURTHER EXERCISES ####################################
+```
+
+### Practical 03
+
+```{r eval = FALSE}
+
+######################################################################################################################################################
+
+############# ICES TRAWL SURVEY AND EVALUATION course #################################################################################################
+
+################# Practical 03 - Exploring the Age Length Keys ###########################################################################################################
+
+################## Doug Beare and Dave Reid   ##########################################################################################################
+
+
+# The aim of this exercise is download ICES exchange format data from www.ices.dk, extract and visualise the age length keys and combine them 
+# with the length-frequency data and chrons to create nos-at-age indices.  We can then look at the implications of various assumptions.
+
+######################################################################################################################################################
+## 1. Install R (http://cran.r-project.org/) packages and Tinn-R   (http://sourceforge.net/projects/tinn-r/).
+######################################################################################################################################################
+
+#install.packages('maps');
+#install.packages('maptools');
+#install.packages('rgdal');
+#install.packages('sp');
+#install.packages('spatial');
+#
+
+library(sp);library(mda);library(doBy);library(PBSmapping);library(maps);library(maptools);library(rgdal);library(spatial);library(fields)  # attach to R search path
+
+######################################################################################################################################################
+## 2. Select some data from the ICES website - http://datras.ices.dk/Data_products/Download/Download_Data_public.aspx
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 3. Save the data to a directory of your choice, eg. 'c:/datras/data' and extract them from the zip files.
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 4. Install the R library datras. Do this by downloading datras*zip from the sharepoint. Open R, go to packages, install package from local zip files.
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 5. Attach datras package to search path
+######################################################################################################################################################
+
+library(datrasR)
+
+######################################################################################################################################################
+## 6. Extract the age length, sex, maturity data from the relevant directory
+######################################################################################################################################################
+
+#alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/RockallData")
+alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+#alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2010-2011")
+#alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2005-2011")
+#alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2001-2011-Q1")
+#
+
+head(alk) # have a look at the data
+
+######################################################################################################################################################
+## 7. Standardise to cm length categories
+######################################################################################################################################################
+
+alk$lngtclass[alk$lngtcode == "."] <- alk$lngtclass[alk$lngtcode == '.']/10
+alk$lngtclass[alk$lngtcode == 0] <- alk$lngtclass[alk$lngtcode == 0]/10
+
+#####################################################################################################################################################
+## 8. Round down length classes & add 0.5
+#####################################################################################################################################################
+
+alk$lngtclass[alk$lngtcode != "5"] <- round(alk$lngtclass[alk$lngtcode != "5"])
+alk$lngtclass[alk$lngtcode != "5"] <- alk$lngtclass[alk$lngtcode != "5"]+0.5
+
+print(table(alk$lngtclass)) # print distribution of ALL length categories
+
+print(table(alk$age))      # print distribution of ALL ages
+
+#####################################################################################################################################################
+## 9. Put on species name (see Practical 2).  
+#####################################################################################################################################################
+
+data(tsn)  # itis database of ALL species in the world
+
+head(tsn)  # first 5 lines
+
+alk$scientific.name <- as.character(tsn$completename[match(alk$speccode,tsn$tsn)])   # match scientific name onto species code 
+
+sort(unique(alk$scientific.name)) # List of species with at least some age data
+
+# Note: you tend to only get more commercially important species being aged etc.
+
+table(alk$scientific.name,alk$age) # print distribution of ages by species (Note: this is for all ages combined).
+
+#####################################################################################################################################################
+## 10. Tidy up
+#####################################################################################################################################################
+
+alk <- alk[!duplicated(alk),]     #  remove any duplicates
+
+alk <- alk[alk$speccode != -9,]   #  missing species codes
+
+alk <- alk[alk$lngtclass != -9,]  #  missing length classes
+
+alk <- alk[alk$age != -9,]        # missing ages
+
+alk <- alk[!is.na(alk$lngtcode),] #  missing length codes
+
+alk <- alk[!is.na(alk$scientific.name),] # missing species codes
+
+alk$age <- as.numeric(as.character(alk$age))
+
+#####################################################################################################################################################
+## 11. Select a species for a particular year and quarter and examine the age length key 
+#####################################################################################################################################################
+
+table(alk$year,alk$scientific.name) # investigate range of years covered for each species
+table(alk$quarter)                  # see range of quarters
+
+#####################################################################################################################################################
+## 12. Chose a species, year and quarter to examine
+#####################################################################################################################################################
+
+what.species    <- 'Pleuronectes platessa'   
+what.year      <- 2001
+what.quarter   <- 3
+
+alk1 <- alk[alk$scientific.name == what.species & alk$year == what.year & alk$quarter == what.quarter,]
+
+alk1t<-table(alk1$lngtclass,alk1$age) # create a table of the distribution of length by ages for the chosen species
+ 
+print(alk1t)                          # have a look at the age distribution by length
+ 
+rowSms <- apply(alk1t,1,sum,na.rm=T) # use apply to calculate row sums
+
+alk1tp <- round(alk1t/rowSms,3)      # divide numbers by total to get proportions
+
+print(alk1tp)                        # have a look at the proportions
+
+#####################################################################################################################################################
+###  13. Plot the data.
+#####################################################################################################################################################
+
+# Try a barplot
+
+par(mfrow=c(1,1))
+barplot(t(alk1tp),space=0,col=1:dim(alk1tp)[[2]],ylab="P",xlab="Length(cms)",
+legend.text=dimnames(alk1tp)[[2]],args.legend=list(x='topleft',bg='wheat'))
+
+# Try a matrix plot 
+
+matplot(alk1tp,type='l',ylab='P(age)',xlab="Length(cms)")
+
+# Since data are a matrix why not try a 3D plot ?
+
+alk1tp[alk1tp==0] <- NA
+library(fields)
+image.plot(as.numeric(dimnames(alk1tp)[[1]]), as.numeric(dimnames(alk1tp)[[2]]),alk1tp,col=topo.colors(100),xlab='Length(cms)',ylab='P(age)')
+contour(as.numeric(dimnames(alk1tp)[[1]]), as.numeric(dimnames(alk1tp)[[2]]),alk1tp,add=T)
+
+#####################################################################################################################################################
+### 14. Apply ALK to Length frequency data ###
+#####################################################################################################################################################
+
+# Simplest approach is to multiply the estimate of the proportion of each age at each length by the number of individuals at that length caught. If you
+# do this you must ensure that you have a length in your ALK available for the corresponding length in your length frequency data.
+
+# Get the length frequency data from the relevant survey
+
+#lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/RockallData")
+lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+#lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2010-2011")
+#lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2001-2011-Q1")
+#
+#  Again make sure to add on scientific name using TSN (downloaded from ITIS website). 
+
+data(tsn)  # itis database of all species in the world
+
+head(tsn)  # first 5 lines
+
+lfs$scientific.name <- as.character(tsn$completename[match(lfs$speccode,tsn$tsn)])   # match scientific name 
+
+table(lfs$scientific.name)        # examine species available with length-frequencies. 
+
+# Tidy up
+
+lfs <- lfs[!duplicated(lfs),]                  #  remove any duplicates
+lfs <- lfs[lfs$speccode != -9,]                #  remove missing species codes
+lfs <- lfs[lfs$lngtclass != -9,]               #  remove missing length classes
+lfs <- lfs[!is.na(lfs$lngtclass),]             #  remove missing length classes
+lfs <- lfs[!is.na(lfs$lngtcode),]              #  remove missing length codes
+lfs <- lfs[!is.na(lfs$scientific.name),]       #  remove any missing scientific names 
+lfs$hlnoatlngt <- lfs$hlnoatlngt*lfs$subfact   #  multiply by the subfactor
+
+
+# Standardise length codes to cms (some are in mms).
+
+lfs$lngtclass[lfs$lngtcode == "."] <- lfs$lngtclass[lfs$lngtcode == '.']/10
+lfs$lngtclass[lfs$lngtcode == "0"] <- lfs$lngtclass[lfs$lngtcode == "0"]/10
+
+lfs$lngtclass[lfs$lngtcode != "5"] <- round(lfs$lngtclass[lfs$lngtcode != "5"])  # Don't do this to fish binned at 5cm intervals
+lfs$lngtclass[lfs$lngtcode != "5"] <- lfs$lngtclass[lfs$lngtcode != "5"]+0.5
+
+
+# Useful to insert a weight for each length category for each species.
+# Remember that this is usually done with parameters (a & b) from non-linear equations where
+# Weight in grammes = aL^b  where L = length.
+
+data(length.weight)
+
+# Match a and b parameters onto the correct species
+
+lfs$a <- length.weight$a[match(lfs$scientific.name,length.weight$scientific.name)]
+lfs$b <- length.weight$b[match(lfs$scientific.name,length.weight$scientific.name)]
+
+# Use the parameters to estimate the weight in kgs.  Remember that weight = aL^b
+
+lfs$hlwtatlngt<-((lfs$a*lfs$lngtclass^lfs$b)*lfs$hlnoatlngt) /1000
+
+## 15. Extract a species to 'play' with. Remember that this should be one for which age length keys are available.
+
+#turbot <- lfs[lfs$scientific.name == 'Psetta maxima',]
+plaice <- lfs[lfs$scientific.name == 'Pleuronectes platessa',]
+#dab    <- lfs[lfs$scientific.name == 'Limanda limanda',]
+#brill  <- lfs[lfs$scientific.name == 'Scophthalmus rhombus',]
+
+#####################################################################################################################################################
+# 16. Get the chrons (e.g. Practical01) because it's easier to use them to estimate effort at different spatial levels of aggregation.
+#####################################################################################################################################################
+
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/RockallData")
+chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+
+#  Usual 'tidy up' procedure.
+
+chrons <- chrons[chrons$haulval=='V',]          # only valid hauls
+chrons <- chrons[!duplicated(chrons),]          # chuck any duplicates
+
+#####################################################################################################################################################
+# 17. Make sure we have zeros in the dataset for stations that were trawled but no individuals caught.
+#####################################################################################################################################################
+
+#merged.haddock <- mergeChronsLfs(chrons=chrons,length.frequencies=haddock)
+merged.plaice  <- mergeChronsLfs(chrons=chrons,length.frequencies=plaice)
+
+#fish <- merged.haddock  # chose species here.
+fish <- merged.plaice 
+
+#####################################################################################################################################################
+## 18. Calculate a very simple index to see the principles using the year quarter combination selected above.
+#####################################################################################################################################################
+
+lf1 <- fish[fish$year == what.year & fish$quarter == what.quarter,]  # select dat for what.year and what.quarter
+
+head(lf1)
+
+lf2 <- tapply(lf1$hlnoatlngt,lf1$lngtclass,sum,na.rm=T) # the total sum of individuals caught on that survey 
+
+print(lf2) #Examine the data
+
+# See if the available lengths correspond to the available aged lengths
+
+length(lf2)
+dim(alk1tp)
+
+alk2tp <- data.frame(alk1tp)
+dimnames(alk2tp)[[2]] <- c("lngtclass","age","p")   # Convert to a dataframe which can make life easier (relational database format)
+
+alk2tp$lngtclass <- as.numeric(as.character(alk2tp$lngtclass))  # Make 'factors' into 'characters'
+alk2tp$age <- as.numeric(as.character(alk2tp$age))              # 
+
+
+head(alk2tp)
+
+# Match the length frequencies with the lengths
+
+alk2tp$hlnoatlngt <- lf2[match(alk2tp$lngtclass,as.numeric(dimnames(lf2)[[1]]))]
+alk2tp$no.at.age  <- alk2tp$hlnoatlngt * alk2tp$p         # multiply the frequencies by the proportions
+alk2tp$no.at.age[is.na(alk2tp$no.at.age)] <- 0            # replace Nas with zeros
+
+# create the most straightforward index possible for that survey
+
+index <- aggregate(list(no.at.age=alk2tp$no.at.age),list(age=alk2tp$age),sum,na.rm=T)
+
+# Plot the index for the year selected.
+
+par(mfrow=c(1,1))
+plot(index$age,index$no.at.age,ylab='nos at age', xlab='age',type='b',lwd=1)  # Linear
+
+plot(index$age,log(index$no.at.age+1),ylab='nos at age', xlab='age',type='b')   # Log scale
+abline(lm(log(no.at.age+1)~age,data=index),lty=3,col='blue')
+
+#####################################################################################################################################################
+## 19. Now create a dataset of numbers by age per ICES statistical rectangle using the function NosatAgebyYearStatSquare
+#####################################################################################################################################################
+
+ #out <- NosatAgebyYearStatSquare(lfdat = merged.haddock,alk = alk, chrons=chrons,  what.species ='Melanogrammus aeglefinus') 
+ 
+ out <- NosatAgebyYearStatSquare(lfdat = merged.plaice,alk = alk, chrons=chrons,  what.species ='Pleuronectes platessa') 
+ 
+ print(head(out))
+  
+  
+  # Plot the nos by year age and stat rectangle.
+  
+  library(lattice)
+   
+  xyplot(log(hlnoatage)~year|age,groups=statrec,type='l',data=out)
+  
+#####################################################################################################################################################    
+## 20. Compare indices calculated in different ways
+#####################################################################################################################################################
+   
+   # total numbers divided by total effort
+   
+     a <- aggregate(list(hlnoatage=out$hlnoatage), list(age=out$age,year=out$year),sum,na.rm=T)   # sum the total numbers
+     hd <- aggregate(list(haulduration=chrons$hauldur/60), list(year=chrons$year),sum,na.rm=T)            # sum the effort 
+     
+     b0 <- merge(a,hd,all=T)                        # merge
+     b0$cpue <- b0$hlnoatage/b0$haulduration        # calculate cpue
+     b0 <- b0[!is.na(b0$hlnoatage),]
+     
+     print(head(b0)) # examine the data b0
+   
+   # versus AVERAGE of the separate cpue in each statistical rectangle
+   
+   out$cpue <- out$hlnoatage/out$haulduration
+   
+    b1 <- aggregate(list(cpue=out$cpue), list(age=out$age,year=out$year),mean,na.rm=T)
+     
+     print(head(b1))
+  
+   # Plot them both to compare
+   
+         par(mfrow=c(3,4),mar=c(2,2,3,2))     # This bit just finds the range of the data for plotting
+         u.ages <- sort(unique(b0$age))
+         r0 <- tapply(b0$cpue,b0$age,range)
+         r1 <- tapply(b1$cpue,b1$age,range)
+         r2 <- as.list(u.ages)
+         for (i in u.ages){
+         r2[[i+1]] <- range(c(r0[as.character(i)],r1[as.character(i)])) 
+         }                                   
+         
+    # Do the plotting
+         
+         for(i in u.ages) {
+      plot(b0$year[b0$age==i],b0$cpue[b0$age==i],type='l',xlab='',ylab='',ylim=r2[[i+1]])
+      lines(b1$year[b1$age==i],b1$cpue[b1$age==i],type='l',col='blue')
+      title(paste('age',i,sep=' '),cex.main=1.2)    }
+      
+#####################################################################################################################################################
+## 20. Now create a dataset of numbers by age each station (eg. by lat and long) using the function NosatAgebyYearLonLat
+#####################################################################################################################################################   
+ 
+out <- NosatAgebyYearLonLat(lfdat = merged.plaice,alk = alk, chrons=chrons,  what.species ='Pleuronectes platessa') 
+  
+out[1:5,]                                        # First 5 lines
+
+out$cpue.by.n <- out$hlnoatage/out$haulduration  # add on CPUE 
+out$cpue.by.wt <- out$hlwtatage/out$haulduration
+ 
+#####################################################################################################################################################
+## 21. Plot data by age
+#####################################################################################################################################################   
+
+## On a bubble plots ##
+
+ par(mfrow=c(1,1))
+ plotMapBlobs(out[out$age==3,],what.quarter=3,what.year = 2007,what.cpue='cpue.by.n',xlim0=c(-16,12),ylim0=c(45,62),scaling.factor=.5)
+  
+##   Or a grid        ##
+ 
+grid.size.y <- .5                                                # grid size here is ICES statistical rectangle but this is entirely flexible
+grid.size.x <- 1  
+
+we <- -16                                                        # east and west boundaries
+ea <- 10
+so <- 48
+no <- 62
+
+par(mfrow=c(1,1))                                                # number of plots
+
+out3 <- out[is.na(out$age) | out$age==3 & out$year ==2007,]
+
+
+nos <-TrawlSurveyGridPlot(out3, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
+nameVarToSum="hlnoatage",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
+legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",addICESgrid=TRUE,legendtitle="nos")
+ 
+effort <-TrawlSurveyGridPlot(out3, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
+nameVarToSum="haulduration",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
+legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",addICESgrid=TRUE,legendtitle="haul duration")
+      
+im.nos <-  as.image.SpatialGridDataFrame(nos, attr=2)      # extract nos from output of TrawlSurveyGridPlot
+im.eff <-  as.image.SpatialGridDataFrame(effort, attr=2)   # extract effort from output of TrawlSurveyGridPlot
+
+im.cpue <- im.nos
+im.cpue$z <- im.nos$z/im.eff$z                             # divide catch by effort
+
+data(nseaBathy)                                            # North Sea
+data(nwestBathy)                                           # North west
+
+library(fields)
+
+image.plot(im.nos$x,im.cpue$y,log(im.cpue$z+1),col=topo.colors(10),xlab='',ylab='')                     # plot the data on a map
+contour(nseaBathy$x,nseaBathy$y,nseaBathy$z,add=T,level=c(20,40,60),col='black')         # add on depth contour
+#contour(nwestBathy$x,nwestBathy$y,nwestBathy$z,add=T,level=c(100,200,500,1000,2000,4000),col='black') 
+
+map("worldHires", add=TRUE, col='darkseagreen', fill=TRUE, bg="white",
+regions=c('uk','ireland','france','germany','netherlands', 'norway','belgium',
+'spain','luxembourg','denmark', 'sweden','iceland', 'portugal','italy','sicily','ussr','sardinia','albania','monaco','turkey','austria',
+'switzerland','czechoslovakia','finland','libya', 'hungary','yugoslavia','poland','greece','romania','bulgaria', 'slovakia','morocco',
+'tunisia','algeria','egypt' ))
+
+
+
+######################################################################################################################################################
+#### Multi-nomial logit modeling of age length keys. The problem is that the data are packed full of missing lengths at various categories.
+# The problem with the simple arithmetic approach above is that there are often no data available. There may be instances where data can be modeled
+# over missing length categories to provide more information.
+#######################################################################################################################################################
+
+
+## Install the library 
+
+library(datrasR)
+
+## Get the data
+
+#alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/RockallData")
+
+alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+
+#alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2010-2011")
+
+head(alk) # have a look at the data
+
+#Note: There is something wrong with the French IBTS data? 
+#alk$lngtclas[alk$ship == 'THA2' & alk$year ==2006] <- alk$lngtclas[alk$ship == 'THA2' & alk$year ==2006]/10
+
+## Standardise to cm length categories
+
+alk$lngtclass[alk$lngtcode == "."] <- alk$lngtclass[alk$lngtcode == '.']/10
+alk$lngtclass[alk$lngtcode == 0]   <- alk$lngtclass[alk$lngtcode == 0]/10
+
+## Round it down
+
+alk$lngtclass <- round(alk$lngtclass)
+
+## Put on species name (see Practical 2).  
+
+data(tsn)  # itis database of ALL species in the world
+
+head(tsn)  # first 5 lines
+
+alk$scientific.name <- as.character(tsn$completename[match(alk$speccode,tsn$tsn)])   # match scientific name onto species code 
+
+unique(alk$scientific.name)# List of species with at least some age data
+
+## e.g. "Melanogrammus aeglefinus" "Pollachius virens" "Gadus morhua" "Merlangius merlangus" 
+
+# Note: you tend to only get more commercially important species being aged etc.
+
+##  Tidy up
+
+alk <- alk[!duplicated(alk),]     #  remove any duplicates
+
+alk <- alk[alk$speccode != -9,]   #  missing species codes
+
+alk <- alk[alk$lngtclass != -9,]  #  missing length classes
+
+alk <- alk[!is.na(alk$lngtcode),] #  missing length codes
+
+alk$age <- as.numeric(as.character(alk$age))
+
+## Select a species for a particular year and quarter and examine the age length key 
+
+table(alk$year,alk$scientific.name) # investigate range of years covered for each species
+table(alk$quarter) # see range of quarters
+
+## Chose a species, year and quarter to examine
+
+what.species    <- 'Gadus morhua' # These are examples.
+
+alk1 <- alk[alk$scientific.name == what.species,]
+
+
+#Extract the columns of interest
+
+alk2 <- data.frame(lngtclass=alk1$lngtclass,age=alk1$age,scientific.name = alk1$scientific.name)
+
+xtabs(~age+lngtclass,data=alk2)     # examine the data
+
+
+# install.packages('mlogit') # Install package if necessary
+
+library(mlogit)
+
+mldata <- mlogit.data(alk2,varying=NULL,choice='age',shape='wide')
+
+mlogit.model<- mlogit(age~1|lngtclass, data = mldata, reflevel="1")
+
+summary(mlogit.model)
+
+#Call:
+#mlogit(formula = age ~ 1 | lngtclass, data = mldata, reflevel = "1", 
+#    method = "nr", print.level = 0)
+#
+#Frequencies of alternatives:
+#         1          0          2          3          4          5          6          7 
+#0.47521866 0.07215743 0.31122449 0.10641399 0.02660350 0.00583090 0.00182216 0.00072886 
+#
+#nr method
+#11 iterations, 0h:0m:3s 
+#g'(-H)^-1g = 1.22E-07 
+#gradient close to zero 
+#
+#Coefficients :
+#                  Estimate  Std. Error  t-value  Pr(>|t|)    
+#alt0            13.9517399   1.2361844  11.2861 < 2.2e-16 ***
+#alt2            -6.5674373   0.2890674 -22.7194 < 2.2e-16 ***
+#alt3           -10.0993640   0.3917688 -25.7789 < 2.2e-16 ***
+#alt4           -15.8707748   0.7141366 -22.2237 < 2.2e-16 ***
+#alt5           -18.9503112   1.2929005 -14.6572 < 2.2e-16 ***
+#alt6           -19.8364277   2.1063412  -9.4175 < 2.2e-16 ***
+#alt7           -21.9500391   3.3799632  -6.4942 8.350e-11 ***
+#alt0:lngtclass  -0.8576694   0.0749124 -11.4490 < 2.2e-16 ***
+#alt2:lngtclass   0.1988813   0.0092909  21.4060 < 2.2e-16 ***
+#alt3:lngtclass   0.2625404   0.0112776  23.2798 < 2.2e-16 ***
+#alt4:lngtclass   0.3558634   0.0159991  22.2427 < 2.2e-16 ***
+#alt5:lngtclass   0.3840026   0.0241738  15.8851 < 2.2e-16 ***
+#alt6:lngtclass   0.3791767   0.0374518  10.1244 < 2.2e-16 ***
+#alt7:lngtclass   0.3995615   0.0557045   7.1729 7.343e-13 ***
+#---
+#Signif. codes:  0 ?***? 0.001 ?**? 0.01 ?*? 0.05 ?.? 0.1 ? ? 1 
+#
+#Log-Likelihood: -2225.3
+#McFadden R^2:  0.37045 
+#Likelihood ratio test : chisq = 2618.9 (p.value=< 2.22e-16)
+#
+#
+
+#  Calculate the logit values
+
+    newdata <- data.frame(lngtclass = 1:90)
+    
+    logit0 <- 13.9517 +  -0.8576*newdata$lngtclass
+    logit1 <- rep(0, 70)
+    logit2 <- -6.5674 +   0.1988*newdata$lngtclass
+    logit3 <- -10.099 +   0.2625*newdata$lngtclass
+    logit4 <- -15.8707 +  0.3558*newdata$lngtclass
+    logit5 <- -18.9503 +  0.3840*newdata$lngtclass
+    logit6 <- -19.8364 +  0.3791*newdata$lngtclass
+    logit7 <- -21.9500 +  0.3995*newdata$lngtclass
+    
+
+# We can exponentiate these logit values and scale them, knowing that the probabilities of for all the ages must sum to one.
+
+
+    logits <- cbind(logit0, logit1, logit2, logit3,logit4,logit5,logit6,logit7)
+    p.unscaled <- exp(logits)
+    p <- cbind(newdata, (p.unscaled / rowSums(p.unscaled)))
+    colnames(p) <- c("lngtclass", "age0", "age1", "age2", "age3","age4","age5","age6","age7")
+    apply(p[,-1],1,sum) #check
+    
+    np <- p[,-1]
+
+par(mfrow=c(1,1),mar=c(5,5,3,3))
+barplot(t(np),space=0,col=1:dim(np)[[2]],ylab="P",xlab="Length(cms)",
+legend.text=dimnames(np)[[2]],args.legend=list(x='topleft',bg='wheat'))
+    
+
+# This basic approach can be extended to incorporate other 'predictor' variables, e.g. sex.
+
+# As an exercise see if you can expand the model to do this and apply the predicted or modeled ALKs to the appropriate length-frequency data.
+
+
+alk2 <- data.frame(lngtclass=alk1$lngtclass,age=alk1$age,sex=alk1$sex)
+
+# Just males and females ano no missing data
+
+alk3 <- alk2[alk2$sex %in% c('M','F'),]
+alk3$sex <- ifelse(alk3$sex =="M",0,1)
+
+
+xtabs(~age+lngtclass+sex,data=alk3)     # examine the data
+
+mldata <- mlogit.data(alk3,varying=NULL,choice='age',shape='wide')
+
+mlogit.model<- mlogit(age~1|lngtclass + sex, data = mldata, reflevel="1")
+
+summary(mlogit.model)
+```
+
+### Practical 04
+
+```{r eval = FALSE}
+
+######################################################################################################################################################
+
+############# ICES TRAWL SURVEY AND EVALUATION course #################################################################################################
+
+################# Practical 04 - Exploring trawl data with statistical models  ###########################################################################################################
+
+################## Doug Beare and Dave Reid   ##########################################################################################################
+
+
+# The aim of this exercise is download ICES exchange format data from www.ices.dk create nos-at-age data and investigate the output by
+# various types of interpolation and regression models.  We can then look at the implications of various assumptions.
+
+######################################################################################################################################################
+## 1. Install R (http://cran.r-project.org/) packages and Tinn-R   (http://sourceforge.net/projects/tinn-r/).
+######################################################################################################################################################
+
+#install.packages('maps');
+#install.packages('maptools');
+#install.packages('rgdal');
+#install.packages('sp');
+#install.packages('spatial');
+#install.packages('mgcv');
+
+install.packages('akima');
+
+#library(sp);library(mda);library(doBy);library(PBSmapping);library(maps);library(maptools);library(rgdal);library(spatial);library(fields)  # attach to R search path
+
+library(mgcv);library(akima);
+
+######################################################################################################################################################
+## 2. Select some data from the ICES website - http://datras.ices.dk/Data_products/Download/Download_Data_public.aspx
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 3. Save the data to a directory of your choice, eg. 'c:/datras/data' and extract them from the zip files.
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 4. Install the R library datras. Do this by downloading datras*zip from the sharepoint. Open R, go to packages, install package from local zip files.
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 5. Attach datras package and others to search path
+######################################################################################################################################################
+
+library(datrasR);library(akima);library(fields);library(mgcv);library(maps);library(mapdata);
+
+######################################################################################################################################################
+## 6. Extract the chrons, lf and alk data for the survey of your choice from the relevant directory ##################################################
+######################################################################################################################################################
+
+#alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+#lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+
+alk <- parseExchangeFormatALKs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2005-2011")
+lfs <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2005-2011")
+chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2005-2011")
+
+######################################################################################################################################################
+## 7. Tidy up the data. This time using the functions tidy** which simply makes things tidier.
+######################################################################################################################################################
+
+alk    <- tidyALKdata(input=alk)
+lfs    <- tidyLfData(input=lfs)
+chrons <- tidyChronData(input=chrons)
+
+lfs$scientific.name[lfs$scientific.name == 'Solea vulgaris'] <- 'Solea solea'      # Change Solea solea  for Solea vulgaris ( I do this here since there is only a and b lw parameters 
+alk$scientific.name[alk$scientific.name == 'Solea vulgaris'] <- 'Solea solea'
+
+head(alk) # have a look at the data to make sure they are still there. 
+head(lfs)
+head(chrons)
+
+##  NOTE: You can ONLY proceed in this Practical with Age data available look at the species with ALK data  ##
+
+sort(unique(alk$scientific.name))
+
+ #[1] "Brosme brosme"              "Clupea harengus"            "Culex impatiens"            "Culex melanurus"            "Culex pinguis"             
+# [6] "Culiseta incidens"          "Engraulis encrasicolus"     "Gadus morhua"               "Glyptocephalus cynoglossus" "Limanda limanda"           
+#[11] "Lophius budegassa"          "Lophius piscatorius"        "Melanogrammus aeglefinus"   "Merlangius merlangus"       "Merluccius merluccius"     
+#[16] "Microstomus kitt"           "Molva molva"                "Mullus barbatus"            "Mullus surmuletus"          "Pleuronectes platessa"     
+#[21] "Pollachius virens"          "Psetta maxima"              "Sardina pilchardus"         "Scomber scombrus"           "Scophthalmus rhombus"      
+#[26] "Solea solea"                "Sprattus sprattus"          "Trachurus trachurus"        "Trisopterus esmarkii"
+#
+
+ww <- grep('Culex', alk$scientific.name)      # There are mosquitoes in the NS IBTS data
+
+alk[ww,][1:5,]
+
+
+######################################################################################################################################################
+## 8. Merge the length-frequencies and chrons
+######################################################################################################################################################
+
+what.species <- 'Gadus morhua'  # chose a species
+what.species <- 'Pleuronectes platessa'
+what.species <- 'Scomber scombrus'
+what.species <- 'Melanogrammus aeglefinus'
+
+
+merged.fish  <- mergeChronsLfs(chrons=chrons,length.frequencies=lfs[lfs$scientific.name==what.species,])
+
+######################################################################################################################################################
+## 9. Get the numbers at age at each station. Note all modeling work below will be based on these files.
+######################################################################################################################################################
+
+nage <- NosatAgebyYearLonLat(lfdat = merged.fish,alk = alk, chrons=chrons,  what.species = what.species)
+
+head(nage,15) # Examine first 10 lines
+
+
+#####################################################################################################################################################
+## 10. Put on CPUEs at each station #################################################################################################################
+#####################################################################################################################################################
+
+nage$cpue.by.n   <- nage$hlnoatage/nage$haulduration
+nage$cpue.by.wt  <- nage$hlwtatage/nage$haulduration
+
+#####################################################################################################################################################
+## 11. Simple linear interpolation can be handy.
+#####################################################################################################################################################
+ 
+ what.age  <- 4  # chose ages
+ grid.size <- 40  # chose grid size (larger number = finer grid)
+ 
+ nage.a <- nage[is.na(nage$age) | nage$age == what.age,]    # select age to plot. Remember this is all the data for all the years. 
+ 
+ 
+
+summary(nage.a$cpue.by.n) ## check you have any +ve data. Sometimes you just have zeros which makes interpolation tricky!
+
+nage.a <- nage.a[!is.na(nage.a$cpue.by.n),]
+
+
+
+inage <- interp(jitter(nage.a$shootlong),jitter(nage.a$shootlat),
+xo=seq(min(nage.a$shootlong), max(nage.a$shootlong), length = grid.size),
+       yo=seq(min(nage.a$shootlat), max(nage.a$shootlat), length = grid.size),nage.a$cpue.by.n) # do the interpolation
+
+par(mfrow=c(1,1))
+image.plot(inage$x,inage$y,log(inage$z+1),col=topo.colors(100),xlab='latititude',ylab='longitude') # plot the nos at age
+contour(inage$x,inage$y,log(inage$z+1),add=T)                                                  # contour too
+data(nseaBathy)
+contour(nseaBathy$x,nseaBathy$y,nseaBathy$z,col='white',levels=c(40,100),add=T)                # depths  too
+map("worldHires", add=TRUE, col='darkseagreen', fill=TRUE, bg="white",                         
+regions=c('uk','ireland','france','germany','netherlands', 'norway','belgium',
+'spain','luxembourg','denmark', 'sweden','iceland', 'portugal','italy','sicily','ussr','sardinia','albania','monaco','turkey','austria',
+'switzerland','czechoslovakia','finland','libya', 'hungary','yugoslavia','poland','greece','romania','bulgaria', 'slovakia','morocco',
+'tunisia','algeria','egypt' ))                                                                  # add a map
+
+## IDEAS for EXERCISES 
+
+# Try for different years and ages and species.
+# Try increasing the grid resolution. 
+# Try adding depth contours instead. 
+
+#####################################################################################################################################################
+## 12. Regression modeling where a variable, say CPUE, is 'modeled' as a function of some PREDICTOR variables (lat, lon, depth, time of day etc.).
+#####################################################################################################################################################
+
+
+# In this file (nage) we only potentially have year, quarter, shootlong, shootlat, and age as potential PREDICTOR variables. There are of course 
+# many other possibilities, eg. depth, temperature, salinity, and these can be incorporated from the chron files if needs be. For now, however,
+# the complexity with even these few PREDICTORS is enough to be vexing as you will see.
+
+
+#####################################################################################################################################################
+## 13. Linear models
+#####################################################################################################################################################
+
+# 13.1 Model the CPUE as a function of year and age using linear models
+
+nage$age <- as.factor(nage$age)
+
+table(nage$age)
+
+ # 0   1   2   3   4   5   6   7   8   9  10 
+# 20 365 667 643 701 621 575 549 432 307 364 
+
+# Since there are so few age 0s (in this example, chuck em out).
+
+mdat <- nage[nage$age != "0",]    # optional
+
+m0 <- lm(cpue.by.n ~ 1,data=mdat)         # The 'null' model against which others will be selected
+m1 <- lm(cpue.by.n ~ year,data=mdat)      # The linear effect of year
+m2 <- lm(cpue.by.n ~ year+age,data=mdat)  # plus the linear effect of age
+m3 <- lm(cpue.by.n ~ year*age,data=mdat)  # plus the interaction between year and age. Are the lines parallel ?
+
+anova(m0,m1,m2,m3)         # which model would you chose ?
+                           
+summary(m3)                # what do you think of this model ?
+
+# Create a data set of years and ages over which to demonstrate the results
+
+newdata <- expand.grid(year = min(mdat$year,na.rm=T):max(mdat$year,na.rm=T), age=as.factor(min(as.numeric(as.character(mdat$age)),na.rm=T ):  max(as.numeric(as.character(mdat$age)),na.rm=T )))
+
+# Have a look at the 'new data'
+
+head(newdata)
+
+# Predict over the newdata using the model 
+
+newdata$pred <- predict(m3,newdata=newdata,type='response')
+
+xyplot(pred ~ year | age, data= newdata)  # anything odd ?  Negative predictions ? # Investigate what might be odd patterns. Try again without the age 0s since there are so 
+
+# few observations these are distorting the out
+
+
+## 13.2 Select a single age group and model the trend with bendy functions
+
+mdat <- nage[nage$age != "0",]
+
+z0 <- lm(cpue.by.n ~ 1,data=mdat)         # The 'null' model against which others will be selected
+z1 <- lm(cpue.by.n ~ ns(year,df=5),data=mdat)      # The linear effect of year
+z2 <- lm(cpue.by.n ~ ns(year,df=5)+age,data=mdat)  # plus the linear effect of age
+z3 <- lm(cpue.by.n ~ ns(year,df=5)*age,data=mdat)  # plus the interaction between year and age. Are the lines parallel ?
+
+# Have a look at the model params 
+
+summary(z3)
+
+# Predict over the same new data using the model 
+
+newdata$pred <- predict(z3,newdata=newdata,type='response')
+
+xyplot(log(pred) ~ year | age, data= newdata)   # Compare the plots output from the different models, ie. substitute z2, for z3.
+
+#####################################################################################################################################################
+##  14. Generalized Linear and Additive Models 
+#####################################################################################################################################################
+
+# Often data are not normal or log-normal. These models give you the ability to model data from different (discrete) distributions 
+# such as the Binomial (Bernoulli), Poisson, etc. With these models the abundance measure (usually a count) should be modeled with 
+# the effort measure (hours towed, distance towed as an offset. Beware, however. Just because these models are more sophisticated
+# doesn't make them necessarily better. In general you should use the simplest model possible. 
+
+## 14.1 Model the probabability of catching a fish at each age in each year using a binomial GLM. 
+
+mdat      <- nage[nage$age != "0",]        # remove age 0s as usual 
+mdat$bin  <- ifelse(mdat$hlnoatage==0,0,1) # create a binary vector (0=0 and 1= anything greater than zero). 
+
+q0 <- glm(bin ~ offset(haulduration)+1,data=mdat,family=binomial)                  # The 'null' model against which others will be selected
+q1 <- glm(bin ~ offset(haulduration)+ year,data=mdat,family=binomial)      # The  effect of year
+q2 <- glm(bin ~ offset(haulduration)+ year+age,data=mdat,family=binomial)  # plus the  effect of age
+q3 <- glm(bin ~ offset(haulduration)+ year*age,data=mdat,family=binomial)  # plus the interaction between year and age. Are the lines parallel ?
+
+anova(q0,q1,q2,q3,test='Chi')    # which model would you chose ??  
+ 
+# We can assess the fit with
+
+    1-pchisq(q3$null.deviance-q3$deviance, q3$df.null-q3$df.residual)
+    
+# The chi-square of q3$null.deviance-q3$deviance with q3$df.null - q3$df.residual degrees of freedom and an associated p-value of less than 0.001 tells us that our model as a whole fits significantly better than an empty model. This is sometimes called a likelihood ratio test (the deviance residual is -2*log likelihood).
+
+# Make some predictions with the model 
+# Note: now that we have the 'offset' in the model we must add it to the grid. Let's standardise all our predictions to 30 mins
+
+newdata$haulduration <- 1
+
+newdata$pred <- predict(q3,newdata=newdata,type='response')
+
+xyplot(log(pred) ~ year | age, data= newdata, type='l')   # Compare the plots output from the different models, ie. substitute z2, for z3.
+
+#####################################################################################################################################################
+## 14.2 Model counts of fish using a GLM. 
+#####################################################################################################################################################
+
+mdat      <- nage[nage$age != "0",] # remove age 0s as usual 
+mdat$freq <- round(mdat$cpue.by.n)  # make sure numbers are integers. A bit of a fudge this and there are probably better ways...
+
+
+p0 <- glm(freq ~ offset(haulduration)+1,data=mdat,family=quasipoisson)                  # The 'null' model against which others will be selected
+p1 <- glm(freq ~ offset(haulduration)+ year,data=mdat,family=quasipoisson)      # The  effect of year
+p2 <- glm(freq ~ offset(haulduration)+ year+age,data=mdat,family=quasipoisson)  # plus the  effect of age
+p3 <- glm(freq ~ offset(haulduration)+ year*age,data=mdat,family=quasipoisson)  # plus the interaction between year and age. Are the lines parallel ?
+
+anova(p0,p1,p2,p3,test='Chi')    # which model would you chose ??  
+ 
+# We can assess the fit with
+
+    1-pchisq(p3$null.deviance-p3$deviance, p3$df.null-p3$df.residual)
+    
+# The chi-square of q3$null.deviance-q3$deviance with q3$df.null - q3$df.residual degrees of freedom and an associated p-value of less than 0.001 tells us that our model as a whole fits significantly better than an empty model. This is sometimes called a likelihood ratio test (the deviance residual is -2*log likelihood).
+
+# Make some predictions with the model 
+# Note: now that we have the 'offset' in the model we must add it to the grid. Let's standardise all our predictions to 30 mins
+
+newdata$haulduration <- 30
+
+newdata$pred <- predict(p3,newdata=newdata,type='response')
+
+xyplot(log(pred) ~ year | age, data= newdata, type='l')   # Compare the plots output from the different models, ie. substitute z2, for z3.
+
+#####################################################################################################################################################
+## 14.2 Model counts of fish using a GAM. 
+#####################################################################################################################################################
+
+# These models use 'non-parametric' smoothing functions based on the data to model the abundances. Can be handy for summarizing spatial patterns. 
+
+library(mgcv)
+
+mdat      <- nage[nage$age != "0",] # remove age 0s as usual 
+mdat$freq <- round(mdat$cpue.by.n)  # make sure numbers are integers. A bit of a fudge this and there are probably better ways...
+mdat.a    <- mdat[mdat$age==7,]     # in this case reduce the complexity and model a single age category.
+
+g0 <- gam(freq ~ offset(haulduration)+1,data=mdat.a,family=quasipoisson)                  # The 'null' model against which others will be selected
+g1 <- gam(freq ~ offset(haulduration)+ s(shootlong,k=100),data=mdat.a,family=quasipoisson)      # The  effect of longitude
+g2 <- gam(freq ~ offset(haulduration)+ s(shootlong,k=100)+s(shootlat,k=100),data=mdat.a,family=quasipoisson)  # plus the  effect of latitude
+
+g3 <- gam(freq ~ offset(haulduration)+ s(shootlong,shootlat,k=25),data=mdat.a,family=quasipoisson)  # plus the interaction between longitude and latitude. Are the lines parallel ?
+
+anova(g0,g1,g2,g3,test='Chi')    # which model would you chose ??  
+
+summary(g3)
+
+ 1-pchisq(g3$null.deviance-g3$deviance, g3$df.null-g3$df.residual)
+ 
+# Do the predictions. This time we have to make a spatial grid. 
+# Use the datras function create.grid which creates a grid with a flag for whether or not it is outside the survey area. Handy
+# since you do not want to extrapolate.
+
+lon.range =  c(-3,8)  # Set the long and lat ranges for the grid depending on survey
+lat.range <- c(52,58)
+grid.size <- 50       # Set the resolution of the grid 
+
+grid <- create.grid(lon.range=lon.range, lat.range=lat.range, lon.n=grid.size, lat.n=grid.size, lon.obs=mdat.a$shootlong, lat.obs=mdat.a$shootlat)
+
+# Extract some data from the output of create.grid that are handy for plotting.
+
+lonnie <- grid$lonnie
+lattie <- grid$lattie
+grid <- grid$grid
+
+plot(grid$shootlong,grid$shootlat,type='n',xlab='',ylab='')   # check grid looks ok
+points(grid$shootlong[grid$ok.lat==T & grid$ok.lon==T ],grid$shootlat[grid$ok.lat==T & grid$ok.lon==T],col='red',pch='.')
+points(chrons$shootlong,chrons$shootlat,pch=".",col='black')
+
+
+grid$haulduration <- 1 # standardise to 60 minute tows
+
+grid$pred <- predict(g3,grid)
+grid$pred[grid$ok.lon==F | grid$ok.lat==F] <- NA
+
+image.plot(lonnie,lattie,matrix(grid$pred,50,50))
+contour(lonnie,lattie,matrix(grid$pred,50,50),add=T)
+# points(mdat.a$shootlong,mdat.a$shootlat,pch=16)   # put on locations of raw data to see if some of the extrapolation is justified.
+map("worldHires", add=TRUE, col='darkseagreen', fill=TRUE, bg="white",
+regions=c('uk','ireland','france','germany','netherlands', 'norway','belgium',
+'spain','luxembourg','denmark', 'sweden','iceland', 'portugal','italy','sicily','ussr','sardinia','albania','monaco','turkey','austria',
+'switzerland','czechoslovakia','finland','libya', 'hungary','yugoslavia','poland','greece','romania','bulgaria', 'slovakia','morocco',
+'tunisia','algeria','egypt' ))
+
+#####################################################################################################################################################
+###################### 15. EXERCISES ################################################################################################################ 
+#####################################################################################################################################################
+
+# These are the numbers at a specific age modeled for a group of years. The last map therefore represents some sort of 'average' spatial distribution.
+# Explore how the average spatial distribution DIFFERS by age.
+# Explore how the spatial distribution for single age groups varies among years.
+# Note this can be done, either by looking at each age/year combination separately, or by incorporating age and year into the model, modifying the grid
+# and predicting over it.  
+
+#lf <- list.files('D:/bearedo/Projects/datras/datras/R')
+#for(i in 1:length(lf)){
+#source(paste('D:/bearedo/Projects/datras/datras/R/',lf[i],sep=''))}
+#
+#lf <- list.files('D:/bearedo/Projects/datras/datras/data')
+#for(i in 1:length(lf)){
+#load(paste('D:/bearedo/Projects/datras/datras/data/',lf[i],sep=''))}
+#
+```
+
+### Practical 05
+
+```{r eval = FALSE}
+lf <- list.files('D:/bearedo/Projects/datras/datras/R')
+for(i in 1:length(lf)){
+source(paste('D:/bearedo/Projects/datras/datras/R/',lf[i],sep=''))}
+
+lf <- list.files('D:/bearedo/Projects/datras/datras/data')
+for(i in 1:length(lf)){
+load(paste('D:/bearedo/Projects/datras/datras/data/',lf[i],sep=''))}
+
+
+
+######################################################################################################################################################
+############# ICES TRAWL SURVEY AND EVALUATION course #################################################################################################
+################# Practical 05 - Simple Community Analyses  ###########################################################################################################
+################## Doug Beare and Dave Reid   ##########################################################################################################
+######################################################################################################################################################
+
+# The aim of this exercise is download ICES exchange format data from www.ices.dk and calculate various types of fish community indicators. 
+
+######################################################################################################################################################
+## 1. Install R (http://cran.r-project.org/) packages and Tinn-R   (http://sourceforge.net/projects/tinn-r/).
+######################################################################################################################################################
+
+#install.packages('maps');
+#install.packages('maptools');
+#install.packages('rgdal');
+#install.packages('sp');
+#install.packages('spatial');
+#install.packages('gam');
+#install.packages('akima');
+install.packages('vegan');
+
+library(sp);library(mda);library(doBy);library(PBSmapping);library(maps);library(maptools);library(rgdal);library(spatial);library(fields)  # attach to R search path
+
+library(vegan);
+######################################################################################################################################################
+## 2. Select some data from the ICES website - http://datras.ices.dk/Data_products/Download/Download_Data_public.aspx
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 3. Save the data to a directory of your choice, eg. 'c:/datras/data' and extract them from the zip files.
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 4. Install the R library datras. Do this by downloading datras*zip from the sharepoint. Open R, go to packages, install package from local zip files.
+######################################################################################################################################################
+
+######################################################################################################################################################
+## 5. Attach datras package ano others to search path
+######################################################################################################################################################
+
+#detach(package:datrasR)  # do this if you want to detach the old one.
+
+library(datrasR);
+
+######################################################################################################################################################
+## 6. Extract the chrons, lf data from the relevant directory
+######################################################################################################################################################
+
+lfs    <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/BTS-TRIDENS-1987-2010")
+
+#lfs    <- parseExchangeFormatLFs(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2001-2011-Q1")
+#chrons <- parseExchangeFormatChrons(wd="D:/bearedo/Consultancy/TrawlSurveyCourseCopenhagen2011/Practicals/NS-IBTS-2001-2011-Q1")
+
+######################################################################################################################################################
+## 7. Tidy up the data. This time using the functions tidy** which simply makes things tidier.
+######################################################################################################################################################
+
+data(tsn)
+data(length.weight)
+data(DatrasSpeciesCodes)
+
+lfs    <- tidyLfData(input=lfs)
+chrons <- tidyChronData(input=chrons)
+
+lfs$scientific.name[lfs$scientific.name == 'Solea vulgaris'] <- 'Solea solea'      # Change Solea solea  for Solea vulgaris ( I do this here since there is only a and b lw parameters
+
+##  have a look at the data to make sure they are still there
+
+head(lfs)
+head(chrons)
+
+# Set the temporal range of your data
+
+start.year <- min(chrons$year,na.rm=T)
+end.year   <- max(chrons$year,na.rm=T)
+
+sort(unique(lfs$scientific.name))
+
+## Throw out any non-fish or keep them in if you want. You decide.
+
+species.to.omit <- c("Aequipecten opercularis", "Arctica islandica" , "Buccinum undatum", "Cancer pagurus" ,"Homarus gammarus",
+ "Loligo subulata", "Loligo vulgaris",  "Loliginidae" ,"Loligo" ,"Loligo forbesii","Pecten maximus" ,
+  "Nephrops norvegicus" ,"Macropipus puber",  "Cephalopoda"  ,"Illex coindetii", "Sepia officinalis","Sepiola","Sepiola atlantica", "Sepiolida","Sepietta owenina","Sepia")
+  
+w0 <- (1:length(lfs[,1]))[lfs$scientific.name %in% species.to.omit]
+  
+nlfs <- lfs[-w0,]              # Create new data.frame with species that you selected thrown out
+
+######################################################################################################################################################
+## 8. Merge the length-frequencies with the chrons.
+######################################################################################################################################################
+
+## Make a shorter chron file with some important covariates to make computation quicker
+
+short.chrons<- data.frame(quarter=chrons$quarter,country=chrons$country,ship=chrons$ship,stno=chrons$stno,
+year=chrons$year,shootlong=chrons$shootlong,shootlat=chrons$shootlat,
+hauldur=(chrons$hauldur/60))
+
+memory.size(4000)   # this can help sometimes with big jobs.
+
+afish <- merge(nlfs,short.chrons,all=T)
+
+######################################################################################################################################################
+## 9. Total numbers of fish divide by the total effort.
+######################################################################################################################################################
+
+afish.yr <- tapply(afish$hlnoatlngt, list(afish$year,as.character(afish$scientific.name)), sum,na.rm=T)
+hd <- tapply(short.chrons$hauldur, list(short.chrons$year),sum,na.rm=T)
+
+dat <- matrix(NA,nrow=dim(afish.yr)[1],ncol=dim(afish.yr)[2])
+for (i in 1: dim(afish.yr)[2]){
+dat[,i] <- afish.yr[,i]/hd      # divide by effort
+}
+
+
+######################################################################################################################################################
+## 10. Calculate diversity indices using package vegan
+######################################################################################################################################################
+
+dat <- ifelse(is.na(dat),0,dat) # replace NAs with 0s
+
+dat<-round(dat)
+library(vegan)
+
+# Calculate and plot the Diversity
+
+H <- diversity(dat)
+plot(start.year:end.year,H,type='l',xlab='',lwd=2)
+abline(v=start.year:end.year,lty=2,col='blue')
+
+
+# Calculate and plot the Simpson
+simp <- diversity(dat, "simpson");
+par(mfrow=c(1,1))
+plot(start.year:end.year,simp,type='l',xlab='',lwd=2)
+abline(v=start.year:end.year,lty=2,col='blue')
+
+# Calculate and plot the Inverse Simpson
+
+invsimp <- diversity(dat, "inv");
+plot(start.year:end.year,invsimp,type='l',xlab='',lwd=2)
+abline(v=start.year:end.year,lty=2,col='blue')
+
+# Calculate and plot the r2
+
+r.2 <- rarefy(dat, 2)
+
+plot(start.year:end.year,r.2,type='l',xlab='',lwd=2)
+abline(v=start.year:end.year,lty=2,col='blue')
+
+# Alpha 
+
+alpha <- fisher.alpha(dat)
+
+plot(start.year:end.year,alpha,type='l',xlab='',lwd=2)
+abline(v=start.year:end.year,lty=2,col='blue')
+
+# Plot them all against each other
+
+pairs(cbind(H, simp, invsimp,r.2), pch="+", col="blue")   # They're all so correlated !
+
+## Species richness (S) and Pielou's evenness (J):
+
+S <- specnumber(dat) 
+
+J <- H/log(S)
+
+dat1<-cbind(H, simp, invsimp, r.2, S, J)
+
+# Plot them all together
+
+par(mfrow=c(2,3),mar=c(3,3,3,2),oma=c(4,4,4,4),cex=.9)
+tit <- c("H","simp","invsimp","r.2","S","J")
+tit <- c("Shannon","Simp","Invsimp","r.2","S","J")
+y.labs <- c("H","Simp","Inv","r.2","S","J")
+atime <- start.year:end.year
+for(j in 1:6){
+plot(atime,(dat1[,j]),xaxt="n",,xlab="",type='b',pch=16,ylab=y.labs[i]);title(tit[j]);
+lines(supsmu(atime,(dat1[,j]),span=0.5), col='red',lwd=3,xlim=c(start.year,end.year))
+box(lwd=2)
+abline(v=seq(start.year,end.year,by=5),lty=2,col="blue")
+abline(v=c(1989,1994),lwd=2,col='black')
+axis(side=1,at=seq(start.year,end.year,by=1),seq(start.year,end.year,by=1),cex.axis=1)
+
+mtext(outer=T,paste('Piscean Diversity',sep=' '),cex=1.7)
+}
+
+### Create a plot to insert into a Word Document ### 
+
+savePlot(filename = "Piscean-diversity.wmf", type=c("wmf"), device=dev.cur())
+
+#######################################################################################################################
+## 11. Some Simple Indices based on Average lengths####################################################################
+#######################################################################################################################
+
+### Average length by year and scientific name. Note you may want to include seasonal information (quarter) if available in your survey. ###
+
+avl <- aggregate(list(a=(nlfs$lngtclass*nlfs$hlnoatlngt),b=nlfs$hlnoatlngt), list(year=nlfs$year,scientific.name=nlfs$scientific.name),sum,na.rm=T)
+
+avl$mean.length <-avl$a/avl$b
+
+print(sort(unique(as.character(avl$scientific.name))))
+
+which.species.to.plot <- sort(c("Zeus faber","Solea solea","Gadus morhua" ,  "Platichthys flesus", "Psetta maxima",  "Pollachius virens", "Hippoglossoides platessoides", 
+"Lepidorhombus whiffiagonis", "Mustelus mustelus","Pleuronectes platessa","Melanogrammus aeglefinus","Scyliorhinus canicula","Squalus acanthus"))
+
+xyplot(mean.length~year|scientific.name,data=avl[avl$scientific.name %in% which.species.to.plot,],type='l')
+
+### Average demersal fish length ### 
+
+# Would be ridiculous for me to 'hardwire' these choices into any code. Far better for you to make choices based on what you want.
+
+group.to.omit <- c('Alosa agone','Alosa alosa','Alosa fallax','Ammodytes','Ammodytes marinus','Ammodytes tobianus', 'Ammodytidae',
+'Clupea harengus','Engraulis encrasicolus','Scomber scombrus','Sardina pilchardus')    # Easier to omit the pelagics
+
+w1 <- (1:length(nlfs[,1]))[nlfs$scientific.name %in% group.to.omit]                    # Find where the omitted group are.
+  
+nlfs0 <- nlfs[-w1,]                                                                    # Create new data.frame with species that you selected thrown out
+
+avl <- aggregate(list(a=(nlfs0$lngtclass*nlfs0$hlnoatlngt),b=nlfs0$hlnoatlngt),
+list(year=nlfs0$year),sum,na.rm=T)                                     # Average length over year.
+
+avl$mean.length <-avl$a/avl$b
+                                                                        # Plot average length against year for group chosen
+par(mfrow=c(1,1))
+plot(start.year:end.year, avl$mean.length,type='l',xlab='',ylab='')
+abline(v=start.year:end.year,lty=2,col='blue')
+
+
+#############################################################################################################################################
+#############12. Large Fish Indicator########################################################################################################
+#############################################################################################################################################
+
+## Note: here we calculate LFI by weight. Substitute hlwtatlngt to calculate numbers.
+
+how.big <- 40 #   Set your large fish threshold
+
+big.fish <- afish[!is.na(afish$lngtclass) & afish$lngtclass >= how.big ,]
+
+## By year ##
+
+afish.yr <- tapply(afish$hlwtatlngt, list(afish$year), sum,na.rm=T)
+bfish.yr <- tapply(big.fish$hlwtatlngt, list(big.fish$year), sum,na.rm=T)
+
+lfi     <- bfish.yr/afish.yr
+
+par(mfrow=c(1,1))
+plot(start.year:end.year,lfi,xlab='',ylab='',type='l',lwd=2)
+abline(v=start.year:end.year,lty=3,col='blue')
+lines(supsmu(start.year:end.year,lfi),col='red')
+title('Large Fish Indicator')
+
+
+## Spatially ##
+
+## Sum total weights over year and location 
+afish.xy <- aggregate(list(all.hlwt=afish$hlwtatlngt), list(shootlong=afish$shootlong,shootlat=afish$shootlat,year=afish$year), sum,na.rm=T)
+
+## Sum the weights of big fish over year and location
+
+bfish.xy <- aggregate(list(big.hlwt=big.fish$hlwtatlngt), list(shootlong=big.fish$shootlong,shootlat=big.fish$shootlat,year=big.fish$year), sum,na.rm=T)
+
+## Plot it on a grid/map using TrawlSurveyGridPlot ##
+
+grid.size.y <- .5                                                # grid size here is ICES statistical rectangle but this is entirely flexible
+grid.size.x <- 1  
+
+we <- -5                                                        # east and west boundaries
+ea <- 10
+so <- 48
+no <- 62
+
+par(mfrow=c(1,1))                                                # number of plots
+
+awt <-TrawlSurveyGridPlot(afish.xy, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
+nameVarToSum="all.hlwt",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
+legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",addICESgrid=TRUE,legendtitle="weight")
+
+bwt <-TrawlSurveyGridPlot(bfish.xy, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
+nameVarToSum="big.hlwt",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
+legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",outGridFile='test.txt',addICESgrid=TRUE,legendtitle="weight")
+
+
+im.awt <-  as.image.SpatialGridDataFrame(awt, attr=2)      # extract total weights from output of TrawlSurveyGridPlot
+im.bwt <-  as.image.SpatialGridDataFrame(bwt, attr=2)      # extract weights of big fish from output of TrawlSurveyGridPlot
+
+im.lfi <- im.awt
+im.lfi$z <- im.bwt$z/im.awt$z                              # divide weight of the big fish by weight of all the fish
+
+data(nseaBathy)                                            # North Sea
+data(nwestBathy)                                           # North west
+
+library(fields)
+
+image.plot(im.lfi$x,im.lfi$y,im.lfi$z,col=topo.colors(10),xlab='',ylab='')                     # plot the data on a map
+
+contour(nseaBathy$x,nseaBathy$y,nseaBathy$z,add=T,level=c(20,40,60),col='black')         # add on depth contour
+#contour(nwestBathy$x,nwestBathy$y,nwestBathy$z,add=T,level=c(100,200,500,1000,2000,4000),col='black') 
+
+map("worldHires", add=TRUE, col='darkseagreen', fill=TRUE, bg="white",
+regions=c('uk','ireland','france','germany','netherlands', 'norway','belgium',
+'spain','luxembourg','denmark', 'sweden','iceland', 'portugal','italy','sicily','ussr','sardinia','albania','monaco','turkey','austria',
+'switzerland','czechoslovakia','finland','libya', 'hungary','yugoslavia','poland','greece','romania','bulgaria', 'slovakia','morocco',
+'tunisia','algeria','egypt' ))
+
+######################################################################################################################################################
+######################################################################################################################################################
+
+
+
+
+
+
+
+
+
+
+#######################################################################################################################################################
+
+## Exercises ## 
+
+## As usual explore the indices among different surveys and groups of years
+## Calculate the large fish index
+
+
+
+
+
+
+#lf <- list.files('D:/bearedo/Projects/datras/datras/R')
+#for(i in 1:length(lf)){
+#source(paste('D:/bearedo/Projects/datras/datras/R/',lf[i],sep=''))}
+#
+#lf <- list.files('D:/bearedo/Projects/datras/datras/data')
+#for(i in 1:length(lf)){
+#load(paste('D:/bearedo/Projects/datras/datras/data/',lf[i],sep=''))}
+
+```
+

@@ -49,7 +49,7 @@ As stated above, the data is stored as a list. Lets check the names of the objec
 names(raw)
 ```
 
-The names refer to the separate dataframes, the haul data (hh), the length data (hl) and the age data (ca). Each of the dataframes can be view by running the following code (not run):
+The names refer to the separate dataframes, the haul data (hh), the length data (hl) and the age data (ca). Each of the dataframes can be viewed by running the following code (not run):
 
 ```{r, eval = FALSE}
 raw$hh %>% glimpse()
@@ -69,7 +69,7 @@ The three dataframes have in total `r length(cn)` columns but thankfully a lot o
 The haul dataframe contains one record per haul and is in a relatively tidy format. The total number of variables (61) may though be a bit overwhelming for routine abundance estimates. The function `tidy_hh` does the following:
 
 * Creates a unique key: The linkage of the haul data to other tidied dataframes (length and age dataframes) will be through the combined key of year, quarter, ship, gear and haulno. This combination of variable is unique within the haul-dataframe. In order to facilitate linkage the key variables are combined into a single variable named **id**. In the haul table the original variables are retained.
-* A datetime variable: Information of the date and time of haul shot in the raw exchange data are stored in four variables: year, month, day and timeshot. While this may be understandable if once is concerned with cross-platform deliveries, within R these variables can be combined into a single variable, here named **datetime**.
+* A datetime variable: Information of the date and time of haul shot in the raw exchange data are stored in four variables: year, month, day and timeshot. While this may be understandable if one is concerned with cross-platform deliveries, within R these variables can be combined into a single variable, here named **datetime**.
 * By default, only selected variables are returned, these being: id, year,
 quarter, survey, ship, gear, haulno, date, country, depth, haulval, hauldur,
 shootlat, shootlong, haullat, haullong, statrec, daynight, datatype, stdspecreccode, bycspecreccode). If all variable are wished for in further processing, the argument all_variable in the `tidy_hh`-function can be set to TRUE (the default setting is FALSE).

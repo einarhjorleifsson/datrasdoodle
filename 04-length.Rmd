@@ -24,6 +24,7 @@ Since in the tidying process all length data were standardized to 60 minutes hau
 ```{r}
 by.haul <- 
   hl %>% 
+  filter(latin == "Pleuronectes platessa") %>% 
   group_by(id) %>% 
   summarise(n = sum(n))
 ```
@@ -58,10 +59,10 @@ by.haul %>%
   filter(haulval == "V") %>% 
   group_by(year, quarter) %>% 
   summarise(m = mean(n)) %>% 
-  ggplot(aes(year, m)) +
+  ggplot(aes(year, m, colour = factor(quarter), group = quarter)) +
   geom_point() +
-  geom_line() +
-  facet_wrap(~ quarter)
+  geom_line() #+
+  #facet_wrap(~ quarter)
 ```
 
 So we are talking about some 10-30 thousand fish being caught per 60 minutes haul with the quarter 3 survey generally showing higher mean than the quarter 1 survey. Using the mean may not be appropriate here, given the general distribution of abundance by haul one observes in groundfish surveys:
