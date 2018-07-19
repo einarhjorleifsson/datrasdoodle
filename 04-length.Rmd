@@ -19,38 +19,42 @@ hl <- read_rds("data/ns-ibts_hl.rds")
 
 ## Catch per haul
 
-Since in the tidying process all length data were standardized to 60 minutes haul time it is easy to calculate the standardized abundance per haul.
+### Abundance
+
+Since in the tidying process all length data were standardized to 60 minutes haul time it is easy to calculate the standardized abundance per haul. Lets do this for some species of choice:
 
 ```{r}
-by.haul <- 
+Latin <- "Pleuronectes platessa"
+by.haul.positive <- 
   hl %>% 
-  filter(latin == "Pleuronectes platessa") %>% 
+  select(-sex) %>% 
+  filter(latin == Latin) %>% 
+  drop_na() %>% 
   group_by(id) %>% 
   summarise(n = sum(n))
 ```
 
-In the code above we have basically collapsed the abundance by species and length going from `r nrow(hl)` observations) to `r nrow(by.haul)` observations. 
+In the code above we have basically collapsed the abundance by length to abundance by haul. The number of records in the by.haul dataframe are `r nrow(by.haul.positive)` while the number of hauls in the haul dataframe are `r nrow(hh)`. The difference are hauls where no `r Latin` was caught.
 
-Now the latter value only refers to the number of hauls where some fish was recorded (or rather where any length measurements where taken), while the total number of stations in the full dataset is the number of rows in the `hh`-dataframe (`r nrow(hh)` hauls). The difference represents the number of zero stations. Now in order to include the stations with zero catch we:
+In order to include the stations with zero catch we:
 
-* Take the haul data and do a left join with the length data which have some catch recorded
-* This results in the zero stations having NA in the n variable. Hence the mutate in combination with ifelse comes to the rescue, setting a value of zero as count for stations where no fish was caught otherwise retain the count value.
+* Take the haul data and do a left join with the length data which have some catch recorded. A demonstration of the join-function family is provided using some simple data in [On joins](#joins).
+* This results in the zero stations having NA in the n variable. Hence the mutate in combination with replace_na comes to the rescue, setting a value of zero as count for stations where no fish was caught otherwise retain the count value.
 
 ```{r}
 by.haul <-
   hh %>% 
-  left_join(by.haul) %>%
-  mutate(n = ifelse(is.na(n), 0, n))
+  select(id, year, quarter, haulval) %>% 
+  left_join(by.haul.positive) %>%
+  mutate(n = replace_na(n, 0))
 ```
-
-A demonstration of the join-function family is provided using some simple data in [On joins](#joins}
 
 A quick count:
 ```{r}
 table(by.haul$haulval, by.haul$n == 0)
 ```
 
-reveals that we have 27702 valid hauls with fish and 6 valid hauls where no fish was caught.
+reveals that we have `r by.haul %>% filter(haulval == "V", n > 0) %>% nrow()` valid hauls with `r Latin` and `r by.haul %>% filter(haulval == "V", n == 0) %>% nrow()` valid hauls where no `r Latin` was caught.
 
 Since we are here we may as well look at the temporal trend in the median abundance using only the valid hauls:
 
@@ -59,13 +63,17 @@ by.haul %>%
   filter(haulval == "V") %>% 
   group_by(year, quarter) %>% 
   summarise(m = mean(n)) %>% 
+  ungroup() %>% 
+  mutate(year = year + 0.25 * quarter - 0.125) %>% 
   ggplot(aes(year, m, colour = factor(quarter), group = quarter)) +
   geom_point() +
-  geom_line() #+
-  #facet_wrap(~ quarter)
+  geom_line() +
+  labs(x = NULL, y = NULL,
+       colour = "Quarter",
+       title = paste("Mean number of", Latin, "per 1 hour haul"))
 ```
 
-So we are talking about some 10-30 thousand fish being caught per 60 minutes haul with the quarter 3 survey generally showing higher mean than the quarter 1 survey. Using the mean may not be appropriate here, given the general distribution of abundance by haul one observes in groundfish surveys:
+Using the mean may not be appropriate here, given the general distribution of abundance by haul one observes in groundfish surveys:
 
 ```{r}
 by.haul %>% 
@@ -78,78 +86,105 @@ by.haul %>%
        y = "Number of stations")
 ```
 
-Here we have most hauls with relatively small catch with occational hauls with very large catches resulting in a highly negatively scewed distribution. The ggplot2 package has a very nice summary statistics (bootstrap mean and standard error) that comes to the rescue:
+Here we have most hauls with relatively small or zero catches with occational hauls with very large catches resulting in a highly negatively scewed distribution. The ggplot2 package has a very nice summary statistics (bootstrap mean and standard error) that comes to the rescue:
 
 ```{r}
 by.haul %>% 
   filter(haulval == "V") %>% 
+  mutate(year = year + 0.25 * quarter - 0.125) %>% 
   ggplot(aes(year, n, colour = factor(quarter))) +
   stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
   expand_limits(y = 0) +
   scale_color_brewer(palette = "Set1") +
   labs(x = NULL, y = NULL,
        colour = "Quarter",
-       title = "Annual abundance",
-       subtitle = "Bootstrap mean and confidence interval")
+       title = paste("Mean number of", Latin, "per 1 hour haul"),
+       subtitle = "Bootstrap mean and one standard error")
 ```
 
-A minor tweaking in the code would also allow us to address the question on the mean number of species that have been caught per haul (or is it only the mean of the species where length measurements are taken??) through time:
+### Weigth (biomass)
+
+If interested in biomass trend the code can easily be ammended, using some isometric length-weight parameters as a rough guess (we will obtain the proper one in XXX). We need to start from scratch and mutate length to weight before summarising by weight for each haul:
+
 ```{r}
-hh %>% 
+by.haul.positive <- 
+  hl %>% 
+  select(-sex) %>% 
+  filter(latin == Latin) %>% 
+  drop_na() %>% 
+  # additional code
+  mutate(wt = n * 0.00001 * length^3) %>% 
+  group_by(id) %>% 
+  summarise(n = sum(n),
+            # additional code
+            wt = sum(wt))
+
+by.haul <-
+  hh %>% 
+  select(id, year, quarter, haulval) %>% 
+  left_join(by.haul.positive) %>% 
+  mutate(n  = replace_na(n,  0),
+         # additional code
+         wt = replace_na(wt, 0))
+by.haul %>% 
   filter(haulval == "V") %>% 
-  left_join(hl %>% 
-              group_by(id) %>% 
-              summarise(n.species = n_distinct(latin))) %>% 
-  ggplot(aes(year, n.species, colour = factor(quarter))) +
+  mutate(year = year + 0.25 * quarter - 0.125) %>% 
+  # Note: Here only replaced variable "n" with "wt":
+  ggplot(aes(year, wt, colour = factor(quarter))) +
   stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
   expand_limits(y = 0) +
   scale_color_brewer(palette = "Set1") +
   labs(x = NULL, y = NULL,
        colour = "Quarter",
-       title = "Number of species per haul",
-       subtitle = "Bootstrap mean and confidence interval")
+       title = paste("Mean catch [kg] of", Latin, "per 1 hour haul"),
+       subtitle = "Bootstrap mean and one standard error")
 ```
 
-One can now obtain a quick overview of the catch distribution:
+### More species
+
+With some yet another minor tweaking we can acutally do this for all species. Here we will though limit ourselves to some "common" species:
 
 ```{r}
-m <- map_data("world")
+Latin <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
+           "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
+           "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
+
+by.haul.positive <- 
+  hl %>% 
+  select(-sex) %>% 
+  filter(latin %in% Latin) %>% 
+  drop_na() %>% 
+  # additional code
+  mutate(wt = n * 0.00001 * length^3) %>% 
+  # additional code: added latin to the grouping
+  group_by(id, latin) %>% 
+  summarise(n = sum(n),
+            # additional code
+            wt = sum(wt))
+
+by.haul <-
+  hh %>% 
+  select(id, year, quarter, haulval) %>% 
+  left_join(by.haul.positive) %>% 
+  mutate(n  = replace_na(n,  0),
+         # additional code
+         wt = replace_na(wt, 0))
 by.haul %>% 
-  filter(year == 2017) %>% 
-  ggplot() +
-  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
-  geom_point(aes(shootlong, shootlat, size = n),
-             colour = "red", alpha = 0.3) + 
-  scale_size_area(max_size = 10) +
-  coord_quickmap(xlim = range(by.haul$shootlong), ylim = range(by.haul$shootlat)) +
-  facet_wrap(~ quarter) +
-  labs(x = NULL, y = NULL, size = "Abundance",
-       title = "NS-IBTS 2017",
-       subtitle = "Catch distribution - No. fish per 60 minute haul")
+  filter(haulval == "V") %>% 
+  mutate(year = year + 0.25 * quarter - 0.125) %>% 
+  # NOTE: Check why this step is
+  drop_na() %>% 
+  # Note: Here only replaced variable "n" with "wt":
+  ggplot(aes(year, wt, colour = factor(quarter))) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
+  expand_limits(y = 0) +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = NULL, y = NULL,
+       colour = "Quarter",
+       title = "Mean catch [kg] per 1 hour haul",
+       subtitle = "Bootstrap mean and one standard error") +
+  facet_wrap(~ latin, scale = "free_y")
 ```
-
-If interested in rough biomass distribution the code can easily be ammended, using isometric length-weight relationship:
-
-```{r}
-hh %>% 
-  left_join(hl %>%
-              mutate(b = n * 0.00001 * length^3) %>% 
-              group_by(id) %>% 
-              summarise(b = sum(b))) %>% 
-  mutate(b = ifelse(is.na(b), 0, b)) %>% 
-  filter(year == 2017) %>% 
-  ggplot() +
-  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
-  geom_point(aes(shootlong, shootlat, size = b),
-             colour = "red", alpha = 0.3) + 
-  scale_size_area(max_size = 10) +
-  coord_quickmap(xlim = range(by.haul$shootlong), ylim = range(by.haul$shootlat)) +
-  facet_wrap(~ quarter) +
-  labs(x = NULL, y = NULL, size = "Biomass",
-       title = "NS-IBTS 2017",
-       subtitle = "Catch distribution - Kg per 60 minute haul")
-```
-
 
 ## CPUE per length per haul
 ___

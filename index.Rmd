@@ -32,6 +32,12 @@ d <-
   read_rds("data/hh_datras.rds") %>% 
   filter(year == 2017)
 
+d <-
+  read_rds("data/hh_datras.rds") %>% 
+  mutate(year = year + 1 / quarter) %>% 
+  group_by(survey) %>% 
+  filter(year == max(year))
+
 icesarea <- 
   gisland::read_sf_ftp("fao-areas") %>%
   mutate(reg = str_sub(name, 1, 2)) %>%

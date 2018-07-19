@@ -1,6 +1,105 @@
 # Common models {#models}
 
+... here some discussion on the tidyverse approach to model fitting ...
+
+```{r}
+library(tidyverse)
+library(modelr)
+ca <- read_rds("data/ns-ibts_ca.rds")
+```
+
 ## Length weight
+
+Consider the pattern in the length vs weight (here *Pleuronectes platessa*):
+```{r}
+Latin <- "Pleuronectes platessa"
+ca %>% 
+  filter(latin == Latin) %>% 
+  ggplot(aes(length, wgt)) +
+  geom_point(size = 0.5, colour = "red")
+```
+
+This is a classical nonlinear relationship. One may want to think about fitting that type of a model directly to the variables. However, there are indication that the variance in the dependent variable (weight) increases with the value of the independent variable (length). This becomes more apparent if we visualize the data using the following code:
+```{r}
+ca %>% 
+  filter(latin == Latin) %>% 
+  mutate(length = cut(length, breaks = seq(0, 60, by = 5))) %>% 
+  filter(!is.na(length)) %>% 
+  ggplot(aes(wgt)) +
+  geom_density() +
+  facet_grid(. ~ length, scale = "free_x") +
+  scale_y_continuous(NULL, NULL) +
+  coord_flip() +
+  labs(x = "Weight [g]",
+       title = "Density distribution of weight by length classes",
+       subtitle = Latin)
+```
+
+Lets take a peek at log-tranformed data:
+```{r}
+ca %>% 
+  filter(latin == Latin) %>% 
+  ggplot(aes(length, wgt)) +
+  geom_point(size = 0.5, colour = "red") +
+  scale_x_log10() +
+  scale_y_log10()
+```
+
+This looks more like it - the variance in the log-weight is now more independent of length. So lets estimate the parameters of such a model:
+```{r}
+d <-
+  ca %>% 
+  filter(latin == Latin) %>% 
+  dplyr::select(length, wgt) %>% 
+  drop_na()
+fit <- lm(log(wgt) ~ log(length), data = d)
+```
+
+The parameters can be "viewed" by the usual printing of the object:
+```{r}
+fit
+```
+
+And the summary of the model output can be "viewed" by the usual call on the `summary`-function:
+```{r}
+summary(fit)
+```
+
+Not surprisingly the model fit is highly significant, if only because the large number of observations.
+
+But lets plot the fit:
+
+```{r}
+aug.dat <- 
+  d %>% 
+  add_predictions(fit) %>% 
+  add_residuals(fit)
+## plot predictions, note we need transform predictions back to non-log space
+aug.dat %>%   
+  ggplot(aes(length, wgt)) + 
+  geom_point(size = 0.5, colour = "red") + 
+  geom_line(aes(y = exp(pred)), colour = 'blue')
+```
+
+To plot a histgram of the residuals we just do (trimming some extremes):
+```{r}
+aug.dat %>% 
+  mutate(resid = ifelse(resid <= -0.5, -0.5, resid),
+         resid = ifelse(resid >=  0.5,  0.5, resid)) %>% 
+  ggplot(aes(resid)) +
+  geom_histogram()
+```
+
+Distribution of the residuals along the dependent variable can be visualised via:
+```{r}
+aug.dat %>% 
+  mutate(length = round(length)) %>% 
+  ggplot(aes(factor(length), resid)) +
+  geom_violin() +
+  geom_hline(yintercept = 0, colour = "red")
+```
+
+So some caution seems warranted with respect the predicting weigth of the smallest and particularily the largest fish - some overestimation may occur - and hence bias in the any biomass statistics delivered.
 
 ## von Bertalanffy
 
@@ -10,7 +109,7 @@
 
 ### One species
 
-Lets start with only focusing on one species.
+Lets start with only focusing on one species (here *Pleuronectes platessa*)
 
 ```{r warning = FALSE, message = FALSE}
 library(tidyverse)
@@ -31,7 +130,7 @@ An empirical fit:
 d2 <-
   d %>% 
   group_by(age) %>% 
-  summarise(p = sum(mature/n()),
+  summarise(p = sum(mature / n()),
             n = n())
 
 model <- glm(mature ~ age, data = d, family = binomial)

@@ -198,55 +198,13 @@ for(i in 1:length(dtrs)) {
 }
 ```
 
-```{r, eval = FALSE, echo = FALSE}
-# NOTE: This has been moved to Auxillary section 
-
-# Get latin name from worms ----------------------------------------------------
-# TODO: Find a way to dplyrize the stuff
-
-# get a complete species code list from all the length data
-fil <- dir("data-raw/datras", full.names = TRUE)
-
-SP <- list()
-for(i in 1:length(fil)) {
-  #print(i)
-  x <-  read_rds(fil[i])$hl
-  if(!is.null(x)) {
-    SP[[i]] <-
-      x %>%
-      select(speccodetype = SpecCodeType,
-             speccode = SpecCode,
-             valid_aphia = Valid_Aphia) %>%
-      distinct() %>%
-      as_tibble()
-  }
-}
-SP <-
-  bind_rows(SP) %>%
-  distinct() %>%
-  mutate(id = 1:n()) %>% 
-  mutate(aphia = valid_aphia) %>%
-  mutate(aphia = ifelse(is.na(aphia) & speccodetype == "W",
-                        speccode,
-                        aphia))
-
-APHIA <- SP %>% select(aphia) %>% drop_na() %>% pull(aphia) %>% unique() %>% sort()
-from_worms <- 
-  wm_id2name_(id = APHIA) %>% 
-  bind_rows() %>%
-  gather(aphia, latin, convert = TRUE)
-SP %>%
-  left_join(from_worms) %>%
-  write_rds("data/species_worms.rds")
-```
-
 ### Tidying
 
 ```{r, eval = FALSE}
 # Make sure the needed objects are available
 fao <- gisland::read_sf_ftp("fao-areas_nocoastline") %>% as("Spatial")
 ns_area <- gisland::read_sf_ftp("NS_IBTS_RF") %>% as("Spatial")
-species <- read_csv("http://www.hafro.is/~einarhj/datrasdoodle/species.csv")
+species <- read_csv("ftp://ftp.hafro.is/pub/reiknid/einar/datras_worms.csv")
 
 fil <- dir("data-raw/datras", full.names = TRUE)
 # Setup list objects to temporarily store the results
@@ -299,9 +257,9 @@ res_ca %>% bind_rows() %>% write_rds("data/ca_datras.rds")
 
 ## Recap
 
-In all its simplicity and with no extra frills the code to download, tidy and save one survey is as follows:
+In all its simplicity and with no extra frills the code to download, tidy and save **one** survey is as follows:
 ```{r, eval = FALSE}
-spe <- read_csv("http://www.hafro.is/~einarhj/datrasdoodle/species.csv")
+spe <- read_csv("ftp://ftp.hafro.is/pub/reiknid/einar/datras_worms.csv")
 sur <- "NS-IBTS"
 yrs <- 1965:2018
 qts <- c(1, 3)

@@ -3,19 +3,16 @@
 [WKIDP](http://www.ices.dk/sites/pub/Publication%20Reports/Expert%20Group%20Report/SSGESST/2014/WKIDP14.pdf)
 check out prj/2013_10datrasDataMining
 
-https://github.com/DTUAqua/DATRAS
-
 ## ICES TRAWL SURVEY AND EVALUATION course
 
-An ICES r-course on the DATRAS data was held in the 20XX by Doug Beare and Dave Reid. The material can be found on [Google Code Archive](https://code.google.com/archive/p/datras). The course relied heavilily on an R-packages called DATRAS, located on the archieve site. The bundled package at the size can not be install on R-versions >= 3.0.0. A (hopefully) pure minimum change of the package code is available on einarhjorleifsson github-repo. To install that package as well as the practicals one can do:
+An ICES r-course on the DATRAS data was held in the 20XX by Doug Beare and Dave Reid. The material can be found on [Google Code Archive](https://code.google.com/archive/p/datras). The course relied heavilily on an R-packages called DATRAS, located on the archieve site. The bundled package at the size can not be install on R-versions >= 3.0.0. A revamped packages is currently in development [here](https://github.com/DTUAqua/DATRAS) but it has not been tested against the course material. A (hopefully) pure minimum change of the orginal package code is available on a [github-repo](https://github.com/einarhjorleifsson/datrasr). To install that package as well as the practicals one can do:
 
 
 ```{r eval = FALSE}
 devtools::install_github("einarhjorleifsson/datrasr")
 ```
 
-What follows are the practicals, where only some minor code modifications have been, mostly reflecting changes associated with this being a R-markdown document.
-
+What follows are the practicals, where only some minor code modifications have been done, mostly reflecting changes associated with this being a R-markdown document and that the material is run in "one session".
 
 ### Practical 01 - Exploring the Chrons
 
@@ -35,7 +32,7 @@ install.packages('PBSmapping')
 
 Attach to search path:
 ```{r, eval = FALSE}
-# NOT RUN: all stuff loaded later
+# NOT RUN: all stuff loaded when loading datrasr
 library(sp)
 library(maptools)
 library(rgdal)
@@ -50,7 +47,7 @@ library(knitr)
 
 4. Install the R library datras. Do this by downloading datras*zip from the sharepoint. Open R, go to packages, install package from local zip files.
 
-5. Attach datras package written by me to the R search path
+5. Attach datrasr package to the R search path
 
 ```{r, message = FALSE}
 library(tidyverse)
@@ -66,20 +63,26 @@ download.file("http://www.hafro.is/~einarhj/data/Exchange\ Data_2011-10-05\ 16_3
               destfile = "Exchange Data_x.csv")
 ```
 
-```{r}
+```{r, eval = FALSE}
+# NOT RUN
 # install_github("einarhjorleifsson/icesDatras", ref = "on_NAs")
+icesDatras::getDATRAS(record = "HH",
+                      survey = "NS-IBTS",
+                      year = 2007:2018, 
+                      quarter = 1) %>% 
+  write_rds("data/tutorial/raw_hh.rds")
+```
+
+```{r}
 chrons <- 
-  icesDatras::getDATRAS(record = "HH",
-                        survey = "NS-IBTS",
-                        year = 2007:2018, 
-                        quarter = 1) %>% 
+  readr::read_rds("data/tutorial/raw_hh.rds") %>% 
   tidyices::tidy_hh(all_variables = TRUE) %>% 
-  # To be in conformity with datras crowd
+  # To be in conformity with tutorial code
   dplyr::rename(datim.shot = datetime) %>% 
   dplyr::mutate(datim.haul = datim.shot + lubridate::dminutes(hauldur))
 ```
 
-7. Here only examine valid hauls, non-duplicates and hauls where we have both shoot and haul positions.
+7. **Here** only examine valid hauls, non-duplicates and hauls where we have both shoot and haul positions.
 
 ```{r}
 chrons <- chrons[chrons$haulval == 'V', ]        # only valid hauls
@@ -88,7 +91,7 @@ chrons <- chrons[!is.na(chrons$haullong), ]      # don't want data without haul 
 chrons <- chrons[chrons$country != 'NOR', ]      # throw out Norway because shoot and haul positions are the same.
 ```
 
-8. Print and examine first 5 lines of chron file 
+8. Print and examine first lines of chron file 
 
 ```{r}
 dplyr::glimpse(chrons)
@@ -97,15 +100,24 @@ dplyr::glimpse(chrons)
 9. Explore the data with R function table
 
 ```{r}
-table(chrons$haulval)                                             # number of valid hauls (check)
-table(chrons$hauldur)                                             # number of hauls at different durations
-table(chrons$gear)                                                # number of gears
-table(chrons$quarter,chrons$year)                                 # number of hauls by year and quarter
-table(chrons$country,chrons$ship)                                 # number of hauls by country and ship
-head(table(chrons$depth, chrons$daynight))                        # number of hauls by day/night and depth                                   
-table(chrons$ship,cut(chrons$depth,breaks=c(seq(0,250,by=25))))   # number of hauls by ship and depth bin.
-head(table(chrons$statrec,as.character(chrons$ship)))             # number of hauls by statistical rectangle and ship
-table(chrons$year)                                                # number of hauls by year
+# number of valid hauls (check)
+table(chrons$haulval, useNA = "ifany")
+# number of hauls at different durations
+table(chrons$hauldur, useNA = "ifany")
+# number of gears
+table(chrons$gear, useNA = "ifany")
+# number of hauls by year and quarter
+table(chrons$quarter,chrons$year, useNA = "ifany")
+# number of hauls by country and ship
+table(chrons$country,chrons$ship, useNA = "ifany")
+# number of hauls by day/night and depth
+head(table(chrons$depth, chrons$daynight, useNA = "ifany"))
+# number of hauls by ship and depth bin.
+table(chrons$ship,cut(chrons$depth,breaks=c(seq(0,250,by=50))))
+# number of hauls by statistical rectangle and ship
+head(table(chrons$statrec,as.character(chrons$ship), useNA = "ifany"))
+# number of hauls by year
+table(chrons$year, useNA = "ifany")
 ```
 
 10. Some simply summary statistics
@@ -127,10 +139,14 @@ tapply(chrons$depth, list(chrons$quarter, chrons$statrec), mean,na.rm=T)
 
 13. average number, duration and distance of hauls in ICES area
 ```{r}
-chrons$ices_area <- ICESarea(chrons, roman = FALSE)                               # Add on ICES area using function datras
-tapply(chrons$hauldur, chrons$ices_area, length)                                  # number of hauls in each ICES area
-round(tapply(chrons$hauldur, chrons$ices_area, sum,na.rm=T)/60)                   # total haul duration in each ICES area
-round(tapply(chrons$distance, chrons$ices_area, sum,na.rm=T)/1000)                # total distance hauled in each ICES area
+# Add on ICES area using function datras
+chrons$ices_area <- ICESarea(chrons, roman = FALSE)
+# number of hauls in each ICES area
+tapply(chrons$hauldur, chrons$ices_area, length)
+# total haul duration in each ICES area
+round(tapply(chrons$hauldur, chrons$ices_area, sum,na.rm=T)/60)
+# total distance hauled in each ICES area
+round(tapply(chrons$distance, chrons$ices_area, sum,na.rm=T)/1000)
 ```
 
 14. You might want to write data out into a csv file for reading with excel or some other software (not run):
@@ -149,19 +165,18 @@ points(chrons$haullong,chrons$haullat,pch=".",col='red',cex=2)
 # add lines for stat rectangles
 abline(h=0:80,v=seq(-30,30,by=.5),lty=2,col='grey',lwd=.5)
 # add map
-map('worldHires',add=T,col='darkseagreen',fill=T)   
-
-
+maps::map('worldHires',add=T,col='darkseagreen',fill=T)   
+# DELIBERATELY EXCLUDED
 # Add depth contours (different files for different areas since the data sets are so big).
-
-# EINAR - DELIBERATELY EXCLUDED
 #data(nseaBathy)   # north sea bathymetry
 #data(nwestBathy)  # north west atlantic shelf bathymetry
 #data(balticBathy) # baltic sea bathymetry
-
-#contour(nseaBathy$x, nseaBathy$y, nseaBathy$z, levels=c(20,40,60,100), add=T)    # add on depth contours for north sea
-#contour(nwestBathy$x, nwestBathy$y, nwestBathy$z, levels=c(100,200,500), add=T)  # add on depth contours for baltic
+# add on depth contours for north sea
+#contour(nseaBathy$x, nseaBathy$y, nseaBathy$z, levels=c(20,40,60,100), add=T)
+# add on depth contours for baltic
+#contour(nwestBathy$x, nwestBathy$y, nwestBathy$z, levels=c(100,200,500), add=T)  
 ```
+
 
 16. Explore data in various ways looking for potential confounding
 ```{r, fig.width = 7.5, fig.height = 6.5}
@@ -203,6 +218,19 @@ for (i in uy) {
 ```
 
 Comment on the distribution of the survey stations 
+
+```{r, echo = FALSE, eval = FALSE}
+# **tidyverse**
+m <- map_data("world", xlim = range(chrons$shootlong), ylim = range(chrons$shootlat))
+chrons %>% 
+  filter(quarter == what.quarter) %>% 
+  ggplot() +
+  geom_point(aes(shootlong, shootlat), size = 0.2, colour = "blue") +
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  coord_quickmap(xlim = range(chrons$shootlong), ylim = range(chrons$shootlat)) +
+  facet_wrap(~ year) +
+  labs(x = NULL, y = NULL)
+```
 
 17. Find chrons within a polygon.  Note: The 'polygon' can also come from a shapefile.
 
@@ -251,7 +279,7 @@ points(chrons$shootlong[-r3$EID],chrons$shootlat[-r3$EID],col='black',pch='+')  
 
 18. Create and plot points and tow tracks using R library sp. Output the result as kml (Google Earth) and shapefiles.
 
-```{r, eval = FALSE}
+```{r}
 spDF <- Chrons2SpatialPointsDF(data=chrons) # Convert the data to a spatial points data.frame
 
 # Plot map in R
@@ -262,15 +290,13 @@ points(spDF,pch=".",col='red',cex=2)
 
 The magic of Google Earth. Note you can change the driver for other formats (not run):
 ```{r, eval = FALSE}
-# NOT RUN
 writeOGR(obj=spDF, dsn="chrons.kml", layer="shoot-locations", driver="KML") 
 writeOGR(obj=spDF, dsn="chrons.shp", layer="shoot-locations", driver="ESRI Shapefile")  # A shapefile.
-
 print(getwd())  # see which directory the file has gone too, find it and open it in Google Earth 
 ```
 
 Similarly tow tracks instead of points
-```{r, fig.width = 7.5, fig.height = 6.5}
+```{r, fig.width = 7.5, fig.height = 6.5, warning = FALSE}
 uships <- unique(chrons$ship) # how many unique ships in the dataset ? 
 print(uships)
 spLDF <- ChronsTrack2SpatialLineDF(input=chrons %>% as.data.frame(),what.ship = c("TRI2"))   # convert to a spatial line data frame for a particular ship. Note the function takes too long if you select too many ships/data.
@@ -281,9 +307,19 @@ lines(spLDF,col='blue',lwd=1)
 
 (not run)
 ```{r, eval = FALSE}
-# NOT RUN
 writeOGR(spLDF, "towtracks.kml", "tracks", "KML") 
 print(getwd())  # see which directory the file has gone too, find it and open file towtracks.kml in Google Earth 
+```
+
+**tidyverse**:
+```{r}
+m <- map_data("world", xlim = range(chrons$shootlong), ylim = range(chrons$shootlat))
+chrons %>% 
+  ggplot() +
+  geom_segment(aes(shootlong, shootlat, xend = haullong, yend = haullat, colour = ship)) +
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  coord_quickmap(xlim = range(chrons$shootlong), ylim = range(chrons$shootlat)) +
+  labs(x = NULL, y = NULL, comment = "Norwegian data not included")
 ```
 
 ####  FURTHER EXERCISES
@@ -298,25 +334,34 @@ The aim of this exercise is download ICES exchange format data from www.ices.dk,
 
 6. Extract the length-frequency data in the relevant directory
 
-```{r}
-#library(sp);library(mda);library(doBy);library(PBSmapping);library(maps);library(maptools);library(rgdal);library(spatial);library(fields)  # attach to R search path
-lfs <- 
-  icesDatras::getDATRAS(record = "HL",
-                        survey = "NS-IBTS",
-                        year = 2007:2018, 
-                        quarter = 1) %>%
-  dplyr::rename_all(tolower)
-  # tidyices::tidy_hl(hh = chrons, all_variables = TRUE) #%>% 
-  # To be in conformity with datras crowd
-  #dplyr::rename(datim.shot = datetime) %>% 
-  #dplyr::mutate(datim.haul = datim.shot + lubridate::dminutes(hauldur))
+```{r, eval = FALSE}
+# Not run
+icesDatras::getDATRAS(record = "HL",
+                      survey = "NS-IBTS",
+                      year = 2007:2018, 
+                      quarter = 1) %>% 
+  write_rds("data/tutorial/raw_hl.rds")
 ```
 
-7. Add on scientific name using TSN (downloaded from ITIS website). data(tsn)  # itis database of all species in the world
+```{r}
+lfs <- 
+  readr::read_rds("data/tutorial/raw_hl.rds") %>% 
+  dplyr::rename_all(tolower) %>% 
+  # just for identical testing
+  dplyr::mutate(.id = 1:n())
+```
+
+7. Add on scientific name
+
+See [Auxillary section](#spcode) on how the species dataframe was obtained (The dataframe and the approach used here is different from that presented in course):
 
 ```{r}
+# lfs$scientific.name <-
+#     as.character(species$completename[match(lfs$speccode,tsn$tsn)])
 species <- 
   readr::read_csv("ftp://ftp.hafro.is/pub/reiknid/einar/datras_worms.csv")
+glimpse(species)
+
 lfs <-
   lfs %>% 
   dplyr::mutate(aphia = valid_aphia,
@@ -326,11 +371,6 @@ lfs <-
   dplyr::left_join(species) %>%
   dplyr::select(-aphia) %>% 
   dplyr::rename(scientific.name = latin)
-  
-#data(tsn)
-#head(tsn)  # first 5 lines
-
-#lfs$scientific.name <- as.character(tsn$completename[match(lfs$speccode,tsn$tsn)])   # match scientific names using tsn 
 
 unique(lfs$scientific.name)[1:10] # print some fish species in the data set. 
 ```
@@ -338,22 +378,25 @@ unique(lfs$scientific.name)[1:10] # print some fish species in the data set.
 8. Tidy up the data
 
 ```{r error = TRUE}
-lfs <- lfs[!duplicated(lfs),]                  #  remove any duplicates
-# this -9 stuff is redundant
-lfs <- lfs[lfs$speccode != -9,]                #  remove missing species codes
-lfs <- lfs[lfs$lngtclass != -9,]               #  remove missing length classes
-lfs <- lfs[!is.na(lfs$lngtclass),]             #  remove missing length classes
+#  remove any duplicates
+lfs <- lfs[!duplicated(lfs),]
+# this -9 stuff is redundant - is taken care of in the when downloading
+#  remove missing species codes
+#  lfs <- lfs[lfs$speccode != -9,]
+#  remove missing length classes
+# lfs <- lfs[lfs$lngtclass != -9,]
+#  remove missing length classes
+lfs <- lfs[!is.na(lfs$lngtclass),]
 lfs <- lfs[!is.na(lfs$lngtcode),]              #  remove missing length codes
 lfs <- lfs[!is.na(lfs$scientific.name),]       #  remove any missing scientific names
-lfs$hlnoatlngt <- lfs$hlnoatlngt*lfs$subfact   #  Multiply by the subfactor
+#  Multiply by the subfactor
+lfs$hlnoatlngt <- lfs$hlnoatlngt*lfs$subfact
 ```
 
 9. Standardise length codes to cms (some are in mms) and create bins of 0.5.
 
 ```{r}
-# REDUNDANT
 table(lfs$lngtcode)
-
 lfs$lngtclass[lfs$lngtcode == "."] <- lfs$lngtclass[lfs$lngtcode == '.']/10
 lfs$lngtclass[lfs$lngtcode == "0"] <- lfs$lngtclass[lfs$lngtcode == "0"]/10
 
@@ -376,63 +419,157 @@ lfs$b <- length.weight$b[match(lfs$scientific.name,length.weight$scientific.name
 
 lfs$hlwtatlngt<-((lfs$a*lfs$lngtclass^lfs$b)*lfs$hlnoatlngt) /1000    # calculate weight in kilos 
 
-print(head(lfs))   # are the weights reasonable ?
+glimpse(lfs)   # are the weights reasonable ?
+```
+
+**tidyverse**:
+```{r}
+hl <- 
+  readr::read_rds("data/tutorial/raw_hl.rds") %>% 
+  dplyr::rename_all(tolower) %>% 
+  # just for identical testing
+  dplyr::mutate(.id = 1:n()) %>% 
+  dplyr::mutate(aphia = valid_aphia,
+                aphia = ifelse(is.na(aphia) & speccodetype == "W",
+                               speccode,
+                               aphia)) %>%
+  dplyr::left_join(species) %>%
+  dplyr::select(-aphia) %>% 
+  dplyr::rename(scientific.name = latin) %>% 
+  distinct() %>% 
+  drop_na(lngtclass,
+         lngtcode,
+         scientific.name) %>% 
+  # NOTE: THIS IS NOT IN tidy_hl
+  mutate(hlnoatlngt = hlnoatlngt * subfactor,
+         lngtclass = ifelse(lngtcode %in% c(".", "0"), lngtclass / 10, lngtclass),
+         lngtclass = floor(lngtclass) + 0.5) %>% 
+  left_join(length.weight) %>% 
+  mutate(hlwtatlngt = ((a * lngtclass ^ b) * hlnoatlngt) /1000)
+
+identical(lfs %>% arrange(.id), hl %>% arrange(.id))
 ```
 
 11. Extract a species. These are just examples but you can let your curiosity roam freely! 
 
 ```{r, fig.width = 7.5, fig.height = 6.5}
-plaice <- lfs[lfs$scientific.name == 'Pleuronectes platessa',]
-#cod <- lfs[lfs$scientific.name == 'Gadus morhua',]
-#dab    <- lfs[lfs$scientific.name == 'Limanda limanda',]
-#lemon  <- lfs[lfs$scientific.name == 'Microstomus kitt',]
-#haddock <-lfs[lfs$scientific.name == 'Melanogrammus aeglefinus',]
+Latin <- "Pleuronectes platessa" # 'Gadus morhua' 'Limanda limanda'
+                                 # 'Microstomus kitt' 'Melanogrammus aeglefinus'
+lfs.sp <- lfs[lfs$scientific.name == Latin,]
 
 # plot some distributions 
-barplot(table(rep(plaice$lngtclass,plaice$hlnoatlngt)),space=0   )  # these are the entire distributions for all the fish in the data you chose
+# these are the entire distributions for all the fish in the data you chose
+barplot(table(rep(lfs.sp$lngtclass, lfs.sp$hlnoatlngt)), space = 0)
 ```
+
+```{r, echo = FALSE, eval = FALSE}
+# NOTE: Above is not correct because hlnoatlngt are not integers, e.g.:
+rep(1, 3.5)
+# In tidyverse one would do:
+lfs.sp %>% 
+  group_by(lngtclass) %>% 
+  summarise(n = sum(hlnoatlngt)) %>% 
+  ggplot(aes(lngtclass, n)) +
+  geom_col()
+```
+
 
 12. Merge lfs with the chrons. One reason is that only the +ve part of the lf data are typically stored and you need a complete list of stations to find the zero hauls.
 
 ```{r}
-# Get the chrons for the same survey (e.g. Practical01)
-#chrons <- parseExchangeFormatChrons(wd="/home/einarhj/r/Pakkar/datrasr")
-# Tidy up the chrons
-chrons <- chrons[chrons$haulval=='V',]          #only valid hauls
+chrons <- 
+  readr::read_rds("data/tutorial/raw_hh.rds") %>% 
+  tidyices::tidy_hh(all_variables = TRUE) %>% 
+  # To be in conformity with tutorial code
+  dplyr::rename(datim.shot = datetime) %>% 
+  dplyr::mutate(datim.haul = datim.shot + lubridate::dminutes(hauldur))
+chrons <- chrons[chrons$haulval=='V',]          # only valid hauls
 chrons <- chrons[!duplicated(chrons),]          # chuck any duplicates
 ```
+
+
 Do the merging, ie. merge the positive component (the length frequencies) with the chrons. The result is a file which has zeros where you did a haul but caught none.
 
 ```{r}
-merged.plaice  <- mergeChronsLfs(chrons=chrons,length.frequencies=plaice)
+merged.sp  <- mergeChronsLfs(chrons=chrons,length.frequencies=lfs.sp)
 ```
+
+```{r}
+# **tidyverse**:
+hh <- 
+  read_rds("data/tutorial/raw_hh.rds") %>% 
+  tidyices::tidy_hh() %>% 
+  distinct() %>% 
+  filter(haulval == "V")
+#hl <-
+#  read_rds("data/tutorial/raw_hl.rds") %>% 
+#  tidyices::tidy_hl(hh = hh, species = species) %>% 
+#  drop_na(length,
+#          latin) %>% 
+#  mutate(length = floor(length) + 0.5) %>% 
+#  left_join(length.weight %>% rename(latin = scientific.name)) %>% 
+#  mutate(wgt = n * (a * length^b) /1000)
+d <- 
+  hh %>% 
+  left_join(hl %>% 
+              filter(scientific.name == Latin)) %>% 
+  mutate(scientific.name  = replace_na(scientific.name, Latin),
+         lngtclass = replace_na(lngtclass, 0),
+         hlnoatlngt      = replace_na(hlnoatlngt, 0),
+         hlwtatlngt    = replace_na(hlwtatlngt, 0))
+nrow(d)
+nrow(merged.sp)
+# Hmmm ...
+```
+
 
 13. Always useful to examine plots of length frequencies and/or probability density functions by year  (why ?) 
 
 ```{r, fig.width = 7.5, fig.height = 6.5}
-fdat <- merged.plaice
 table(chrons$year,chrons$quarter)   # find range of data 
-
+fdat <- merged.sp
 par(mar=c(3,3,1,1),oma=c(3,3,3,3),mfcol=c(3,4))
-plot.Lfs(fish=fdat,what.quarter=1,chrons1=chrons)             #e.g plot the length frequencies
-
-plot.PDensity(fish=fdat,what.quarter=1,chrons1=chrons,bw=.5)   #e.g plot the density function
+# e.g plot the length frequencies
+plot.Lfs(fish=merged.sp,what.quarter=1,chrons1=chrons)
+# e.g plot the density function
+plot.PDensity(fish=merged.sp,what.quarter=1,chrons1=chrons,bw=.5)
 ```                                                                     
+
+**tidyverse**:
+```{r}
+hd <- 
+  hh %>% 
+  group_by(year) %>% 
+  summarise(effort = sum(hauldur, na.rm = TRUE) / 60)
+d %>% 
+  group_by(lngtclass, year) %>% 
+  summarise(n = sum(hlnoatlngt, na.rm = TRUE)) %>%
+  left_join(hd) %>% 
+  mutate(cpue = n / effort) %>% 
+  ggplot(aes(lngtclass, cpue)) +
+  geom_col() +
+  facet_wrap(~ year, dir = "v")
+```
+
 
 14. Plot CPUE by year and quarter  
 
 Note: In my opinion it is always preferable to keep catch and effort databases separate, chose level of aggregation, aggregate over that level and then divide the catch by the effort.
 
 ```{r, fig.width = 7.5, fig.height = 6.5}
-fish <- merged.plaice
-
-fish <-fish[!is.na(fish$haullong),]     # sometimes there are incomplete chron records.
-
-fish$cpue.by.n  <- fish$hlno/fish$hauldur # divide catch by effort (n)
-fish$cpue.by.wt <- fish$hlwt/fish$hauldur # divide catch by effort (weight)
-
-nfish <- aggregate(list(cpue.by.n=fish$cpue.by.n,cpue.by.wt=fish$cpue.by.wt),
-list(year=fish$year,quarter=fish$quarter),mean,na.rm=T)     # average cpues caught over year and quarter. Is this correct ??
+fish <- merged.sp
+# sometimes there are incomplete chron records:
+fish <- fish[!is.na(fish$haullong),]
+# divide catch by effort (n)
+fish$cpue.by.n  <- fish$hlno/fish$hauldur
+# divide catch by effort (weight)
+fish$cpue.by.wt <- fish$hlwt/fish$hauldur
+# average cpues caught over year and quarter. Is this correct ??
+nfish <- 
+  aggregate(list(cpue.by.n=fish$cpue.by.n,cpue.by.wt=fish$cpue.by.wt),
+            list(year=fish$year,quarter=fish$quarter),
+            mean,
+            na.rm=T)     
 
 
 # Put on absolute time (qtrend).
@@ -446,17 +583,49 @@ plot(nfish$qtrend,nfish$cpue.by.wt,type='b',xlab='time',ylab='cpue',xaxt='n');ti
 axis(side=1,at=nfish$qtrend,labels=as.character(nfish$year))
 ```
 
+**tidyverse**:
+```{r}
+d1 <-
+  d %>% 
+  # This is unecessary
+  filter(!is.na(haullong)) %>% 
+  mutate(n = hlnoatlngt / hauldur,
+         wt = hlwtatlngt / hauldur) %>% 
+  group_by(year) %>% 
+  summarise(n = mean(n, na.rm = TRUE),
+            wt = mean(wt, na.rm = TRUE)) %>% 
+  gather(variable, value, n:wt) %>% 
+  mutate(method = "direct")
+d1 %>% 
+  ggplot(aes(year, value)) +
+  geom_point() +
+  geom_line() +
+  facet_grid(variable ~ ., scale = "free_y")
+d2 <-
+  d %>% 
+  group_by(year) %>% 
+  summarise(n = sum(hlnoatlngt, na.rm = TRUE),
+            wt = sum(hlwtatlngt, na.rm = TRUE)) %>%
+  left_join(hd) %>% 
+  mutate(n = n / (effort * 60),
+         wt = wt / (effort * 60)) %>%
+  gather(variable, value, n:wt) %>% 
+  mutate(method = "indirect")
+bind_rows(d1, d2) %>% 
+  ggplot(aes(year, value, colour = method)) +
+  geom_point() +
+  geom_line() +
+  facet_grid(variable ~ ., scale = "free_y")
+```
+
+Hmmm, ... need to dig deeper into this
+
 15. Map total numbers of individuals caught and/or weights
 
 How about Bubble plots?
 
 ```{r, fig.width = 7.5, fig.height = 6.5}
-# Select data (species) 
-fish <- merged.plaice   # chose plaice or whatever
-#fish <- merged.dab
-#fish <- merged.angler
-#fish <- merged.cod
-#fish <- merged.haddock
+fish <- merged.sp   # chose plaice or whatever
 
 fish <-fish[!is.na(fish$haullong),]      # sometimes there are incomplete chron records.
 
@@ -485,12 +654,7 @@ Grid of colors scaled to abundance
 
 Note: same thing here. We want to first chose our level of aggregation, sum the numbers or weights over it and then the same for effort dividing one by the other.
 ```{r, error = TRUE}
-fish <- merged.plaice    # Chose the species
-#fish <- merged.dab
-#fish <- merged.angler
-#fish <- merged.cod
-#fish <- merged.haddock
-#
+fish <- merged.sp    # Chose the species
 
 fish <-fish[!is.na(fish$haullong),]     # sometimes there are incomplete chron records.
 
@@ -572,25 +736,20 @@ regions=c('uk','ireland','france','germany','netherlands', 'norway','belgium',
 
 ### Practical 03 - Exploring the Age Length Keys
 
-1. Install R (http://cran.r-project.org/) packages and Tinn-R   (http://sourceforge.net/projects/tinn-r/).
-
-```{r, eval = FALSE}
-library(sp);library(mda);library(doBy);library(PBSmapping);library(maps);library(maptools);library(rgdal);library(spatial);library(fields)  # attach to R search path
-```
-
-2. Select some data from the ICES website - http://datras.ices.dk/Data_products/Download/Download_Data_public.aspx
-3. Save the data to a directory of your choice, eg. 'c:/datras/data' and extract them from the zip files.
-4. Install the R library datras. Do this by downloading datras*zip from the sharepoint. Open R, go to packages, install package from local zip files.
-5. Attach datras package to search path
 6. Extract the age length, sex, maturity data from the relevant directory
 
+```{r, eval = FALSE}
+# Not run
+icesDatras::getDATRAS(record = "CA",
+                      survey = "NS-IBTS",
+                      year = 2007:2018, 
+                      quarter = 1) %>%
+  readr::write_rds("data/tutorial/raw_ca.rds")
+```
+
 ```{r}
-#alk <- parseExchangeFormatALKs(wd = "/home/einarhj/r/Pakkar/datrasr")
 alk <- 
-  icesDatras::getDATRAS(record = "CA",
-                        survey = "NS-IBTS",
-                        year = 2007:2018, 
-                        quarter = 1) %>%
+  read_rds("data/tutorial/raw_ca.rds") %>% 
   dplyr::rename_all(tolower)
 
 head(alk) # have a look at the data
