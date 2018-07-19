@@ -194,11 +194,14 @@ APHIA <-
 # Obtain a dataframe matching aphia with Latin name
 from_worms <- 
   # You need an internet connection for this to work
-  wm_id2name_(id = APHIA) %>% 
+  worrms::wm_id2name_(id = APHIA) %>% 
   bind_rows() %>%
   gather(aphia, latin, convert = TRUE)
 from_worms %>% 
-  write_rds("data/species_worms.rds")
+  write_rds("data/datras_worms.rds")
+from_worms %>% 
+  write_csv("/net/ftp/export/home/ftp/pub/reiknid/einar/datras_worms.csv")
+system("chmod a+rx /net/ftp/export/home/ftp/pub/reiknid/einar/datras_worms.csv")
 ```
 
 
