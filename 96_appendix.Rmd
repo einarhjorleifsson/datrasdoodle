@@ -450,6 +450,37 @@ hl <-
 identical(lfs %>% arrange(.id), hl %>% arrange(.id))
 ```
 
+**tidyverse**:
+```{r}
+hl <- 
+  readr::read_rds("data/tutorial/raw_hl.rds") %>% 
+  dplyr::rename_all(tolower) %>% 
+  # just for identical testing
+  dplyr::mutate(.id = 1:n()) %>% 
+  dplyr::mutate(aphia = valid_aphia,
+                aphia = ifelse(is.na(aphia) & speccodetype == "W",
+                               speccode,
+                               aphia)) %>%
+  dplyr::left_join(species) %>%
+  dplyr::select(-aphia) %>% 
+  dplyr::rename(scientific.name = latin) %>% 
+  distinct() %>% 
+  drop_na(lngtclass,
+         lngtcode,
+         scientific.name) %>% 
+  mutate(hlnoatlngt = hlnoatlngt * subfactor,
+         lngtclass = ifelse(lngtcode %in% c(".", "0"), lngtclass / 10, lngtclass),
+         lngtclass = floor(lngtclass) + 0.5) %>% 
+  left_join(length.weight) %>% 
+  mutate(hlwtatlngt = ((a * lngtclass ^ b) * hlnoatlngt) /1000)
+```
+
+```{r, eval = FALSE, echo = FALSE}
+identical(lfs %>% arrange(.id), hl %>% arrange(.id))
+```
+
+
+
 11. Extract a species. These are just examples but you can let your curiosity roam freely! 
 
 ```{r, fig.width = 7.5, fig.height = 6.5}
@@ -501,6 +532,7 @@ hh <-
   tidyices::tidy_hh() %>% 
   distinct() %>% 
   filter(haulval == "V")
+
 #hl <-
 #  read_rds("data/tutorial/raw_hl.rds") %>% 
 #  tidyices::tidy_hl(hh = hh, species = species) %>% 
@@ -521,6 +553,7 @@ nrow(d)
 nrow(merged.sp)
 # Hmmm ...
 ```
+
 
 
 13. Always useful to examine plots of length frequencies and/or probability density functions by year  (why ?) 
@@ -549,6 +582,7 @@ d %>%
   ggplot(aes(lngtclass, cpue)) +
   geom_col() +
   facet_wrap(~ year, dir = "v")
+
 ```
 
 
