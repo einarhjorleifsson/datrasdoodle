@@ -18,10 +18,11 @@ hl <- read_rds("data/ns-ibts_hl.rds")
 ```
 
 ## Catch per haul
+___
 
 ### Abundance
 
-Since in the tidying process all length data were standardized to 60 minutes haul time it is easy to calculate the standardized abundance per haul. Lets do this for some species of choice:
+Since in the tidying process all length data counts were standardized to 60 minutes haul time it is relatively straight forward to calculate the standardized abundance per 60 minute haul. Lets do this for some species of choice:
 
 ```{r}
 Latin <- "Pleuronectes platessa"
@@ -29,6 +30,9 @@ by.haul.positive <-
   hl %>% 
   select(-sex) %>% 
   filter(latin == Latin) %>% 
+  # NOTE: I am not sure if the next step is kosher
+  #       Basically droping rows where length and/or n is NA
+  #       Check with the DATRAS experts
   drop_na() %>% 
   group_by(id) %>% 
   summarise(n = sum(n))
@@ -41,7 +45,7 @@ In order to include the stations with zero catch we:
 * Take the haul data and do a left join with the length data which have some catch recorded. A demonstration of the join-function family is provided using some simple data in [On joins](#joins).
 * This results in the zero stations having NA in the n variable. Hence the mutate in combination with replace_na comes to the rescue, setting a value of zero as count for stations where no fish was caught otherwise retain the count value.
 
-```{r}
+```{r, message = FALSE}
 by.haul <-
   hh %>% 
   select(id, year, quarter, haulval) %>% 
@@ -49,9 +53,14 @@ by.haul <-
   mutate(n = replace_na(n, 0))
 ```
 
+We now have a dataframe that looks like this:
+```{r}
+glimpse(by.haul)
+```
+
 A quick count:
 ```{r}
-table(by.haul$haulval, by.haul$n == 0)
+table(by.haul$haulval, by.haul$n == 0, useNA = "ifany")
 ```
 
 reveals that we have `r by.haul %>% filter(haulval == "V", n > 0) %>% nrow()` valid hauls with `r Latin` and `r by.haul %>% filter(haulval == "V", n == 0) %>% nrow()` valid hauls where no `r Latin` was caught.
@@ -68,14 +77,17 @@ by.haul %>%
   ggplot(aes(year, m, colour = factor(quarter), group = quarter)) +
   geom_point() +
   geom_line() +
+  scale_color_brewer(palette = "Set1") +
   labs(x = NULL, y = NULL,
        colour = "Quarter",
-       title = paste("Mean number of", Latin, "per 1 hour haul"))
+       title = paste0(Latin, ": Mean number of per 1 hour haul"))
 ```
+
+Now the trend in the abundance, particularly in the earlier part of the time-series may be confounded with the survey coverage and sampling design over time (TODO: More on that later).
 
 Using the mean may not be appropriate here, given the general distribution of abundance by haul one observes in groundfish surveys:
 
-```{r}
+```{r, message = FALSE}
 by.haul %>% 
   filter(haulval == "V") %>% 
   # put the values above the 99%th percentile to 99%th percentile
@@ -86,7 +98,7 @@ by.haul %>%
        y = "Number of stations")
 ```
 
-Here we have most hauls with relatively small or zero catches with occational hauls with very large catches resulting in a highly negatively scewed distribution. The ggplot2 package has a very nice summary statistics (bootstrap mean and standard error) that comes to the rescue:
+Here we have most hauls with relatively small or zero catches with occasional hauls with very large catches resulting in a highly negatively scewed distribution. The ggplot2 package has a very nice summary statistics (bootstrap mean and standard error) that comes to the rescue:
 
 ```{r}
 by.haul %>% 
@@ -104,9 +116,9 @@ by.haul %>%
 
 ### Weigth (biomass)
 
-If interested in biomass trend the code can easily be ammended, using some isometric length-weight parameters as a rough guess (we will obtain the proper one in XXX). We need to start from scratch and mutate length to weight before summarising by weight for each haul:
+If one is interested in obtaining biomass trend the above code can easily be amendment (actually expanded), using some isometric length-weight parameters as a rough guess for the weight as a function of length (we will obtain more reasonable parameters based on some length-weight data in chapter XXX). We start from scratch and mutate length to weight before summarizing by weight for each haul:
 
-```{r}
+```{r, message = FALSE}
 by.haul.positive <- 
   hl %>% 
   select(-sex) %>% 
@@ -140,41 +152,64 @@ by.haul %>%
        subtitle = "Bootstrap mean and one standard error")
 ```
 
+The above code could easily be amended if one were interested in exploring the trend for lets say only the larger sized fish (only one line needs to be added). We will however go into more details on that in the next subsection.
+
 ### More species
 
-With some yet another minor tweaking we can acutally do this for all species. Here we will though limit ourselves to some "common" species:
+With some yet another minor tweaking we can actually do this for all species. Here we will though limit ourselves to some "common" species:
 
 ```{r}
 Latin <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
            "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
-           "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
+           "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa",
+           "Solea solea", "Anarhichas lupus", "Lophius piscatorius")
 
 by.haul.positive <- 
   hl %>% 
   select(-sex) %>% 
   filter(latin %in% Latin) %>% 
   drop_na() %>% 
-  # additional code
   mutate(wt = n * 0.00001 * length^3) %>% 
   # additional code: added latin to the grouping
   group_by(id, latin) %>% 
   summarise(n = sum(n),
-            # additional code
             wt = sum(wt))
+```
 
+Now, since we have more than one species the following **will not work** for us (see [on missingness](#onmissingness) in the Auxiliary chapter, explaining why with some simplified haul and count dataframes as examples):
+
+```{r, eval = FALSE}
+# Not run
 by.haul <-
   hh %>% 
   select(id, year, quarter, haulval) %>% 
   left_join(by.haul.positive) %>% 
   mutate(n  = replace_na(n,  0),
-         # additional code
          wt = replace_na(wt, 0))
-by.haul %>% 
+```
+
+The simplest way to include implicitly missing species is to first generate a dataframe that contains all the hauls and species combination before one does the left join with the count data. Here we use the function crossing (again see [on missingness](#onmissingness)):
+```{r message = FALSE}
+all <- 
+  hh %>% 
   filter(haulval == "V") %>% 
+  # Lets only carry forward variables "needed"
+  select(id, year, quarter, shootlong, shootlat, faoarea) %>% 
+  crossing(latin = Latin)
+by.haul <- 
+  all %>% 
+  left_join(by.haul.positive) %>% 
+  mutate(n = replace_na(n, 0),
+         wt = replace_na(wt, 0))
+glimpse(by.haul)
+```
+
+Now the number of records in the "all" dataframe is `r nrow(all)`. This is equivalent to the number of valid hauls in the "hh" dataframe (`r hh %>% filter(haulval == "V") %>% nrow()` records) times the number of species we chose to work with (`r length(Latin)` species). Take also note, that the "by.haul" dataframe has the same number of records - so the left-join does not really add more records, just adds the abundance and the weight variables to the proper haul and species variable combination.
+
+So we are now able to calculate and plot the bootstrap means:
+```{r}
+by.haul %>% 
   mutate(year = year + 0.25 * quarter - 0.125) %>% 
-  # NOTE: Check why this step is
-  drop_na() %>% 
-  # Note: Here only replaced variable "n" with "wt":
   ggplot(aes(year, wt, colour = factor(quarter))) +
   stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
   expand_limits(y = 0) +
@@ -186,8 +221,229 @@ by.haul %>%
   facet_wrap(~ latin, scale = "free_y")
 ```
 
+```{r echo = FALSE, eval = FALSE}
+# Since we are at it, and since we have included some additional variables we could "look" at the 
+by.haul %>% 
+  filter(latin == "Gadus morhua",
+         quarter == 3) %>% 
+  mutate(year = year + 0.25 * quarter - 0.125) %>% 
+  ggplot(aes(year, wt)) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
+  expand_limits(y = 0) +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = NULL, y = NULL,
+       title = "Mean catch [kg] per 1 hour haul",
+       subtitle = "Bootstrap mean and one standard error") +
+  facet_wrap(~ faoarea, scale = "free_y")
+by.haul %>% 
+  filter(latin == "Gadus morhua",
+         quarter == 3,
+         str_sub(faoarea, 1, 4) %in% "27.4") %>%
+  mutate(lat = round(shootlat),
+         year = year + 0.25 * quarter - 0.125) %>% 
+  ggplot(aes(year, wt)) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
+  expand_limits(y = 0) +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = NULL, y = NULL,
+       title = "Mean catch [kg] per 1 hour haul",
+       subtitle = "Bootstrap mean and one standard error") +
+  facet_grid(faoarea ~ ., scale = "free_y")
+```
+
+### Spatial distribution
+
+Just because we can, it is easy to plot a spatial distribution of abundance or biomass from the above data. E.g. to plot the distribution of catch by species in the most recent survey all that is needed is:
+```{r, message = FALSE}
+m <- map_data("world", xlim = range(by.haul$shootlong), ylim = range(by.haul$shootlat))
+by.haul %>% 
+  filter(year == 2018,
+         quarter == 1) %>% 
+  ggplot() +
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  geom_point(aes(shootlong, shootlat, size = wt), colour = "red", alpha = 0.5) +
+  scale_size_area(max_size = 10) +
+  scale_x_continuous(NULL, NULL) +
+  scale_y_continuous(NULL, NULL) +
+  coord_quickmap(xlim = range(by.haul$shootlong), ylim = range(by.haul$shootlat)) +
+  facet_wrap(~ latin,
+             nrow = 2) +
+  labs(size = "kg hr-1",
+       title = "Catch per standardized haul",
+       subtitle = "NS-IBTS 2018, quarter 1")
+```
+
+Or one could select one species and plot different years:
+
+```{r}
+Latin <- "Anarhichas lupus"
+by.haul %>% 
+  filter(year %in% 2010:2018,
+         latin == Latin) %>% 
+  ggplot() +
+  geom_polygon(data = m, aes(long, lat, group = group), fill = "grey") +
+  geom_point(aes(shootlong, shootlat, size = wt), colour = "red", alpha = 0.5) +
+  scale_size_area(max_size = 10) +
+  scale_x_continuous(NULL, NULL) +
+  scale_y_continuous(NULL, NULL) +
+  coord_quickmap(xlim = range(by.haul$shootlong), ylim = range(by.haul$shootlat)) +
+  facet_grid(quarter ~ year) +
+  labs(size = "kg hr-1",
+       title = paste0(Latin, ": Catch per standardized haul"),
+       subtitle = "NS-IBTS quarter 1 and 3")
+```
+
+Similarly as one rasterized temperature in the haul chapter we could rasterize the biomass and plot it according to:
+```{r, fig.height = 8}
+by.square <-
+  by.haul %>% 
+  mutate(long = gisland::grade(shootlong, 1),
+         lat  = gisland::grade(shootlat, 0.5)) %>% 
+  group_by(year, quarter, latin, long, lat) %>% 
+  summarise(n = mean(n),
+            wt = mean(wt))
+Latin <- "Pleuronectes platessa"
+by.square %>% 
+  filter(latin == Latin,
+         quarter == 1,
+         year >= 1975) %>% 
+  mutate(wt = ifelse(wt > quantile(wt, 0.50), quantile(wt, 0.50), wt),
+         # for zero squares - plot as grey
+         wt = ifelse(wt == 0, NA_real_, wt)) %>% 
+  ggplot(aes(long, lat)) +
+  geom_raster(aes(fill = wt)) +
+  scale_fill_viridis_c(option = "B", direction = -1) +
+  geom_polygon(data = m, aes(group = group), fill = "grey") +
+  coord_quickmap(xlim = range(hh$shootlong), ylim = range(hh$shootlat)) +
+  facet_wrap(~ year) +
+  scale_x_continuous(NULL, NULL) +
+  scale_y_continuous(NULL, NULL) +
+  labs(fill = "kg hr-1",
+       title = paste0(Latin, ": Mean catch per square"),
+       subtitle = "NS-IBTS, quarter 1")
+```
+
+Must say that for the historical part the zero catch squares (for plaice) are a bit intriguing - is it a bug in the code, the way things were recorded in different cruises or a reflection of biological truth?
+
 ## CPUE per length per haul
 ___
+
+In section above we started off by collapsing all size structured information. However, we are often interested in exploring and using the more detailed measurements by length. Lets start by looking at only one species
+
+```{r}
+Latin <- "Pleuronectes platessa"
+by.haul.positive <- 
+  hl %>% 
+  filter(latin == Latin) %>% 
+  # Ignore sex, but tally up numbers by length
+  group_by(id, latin, length) %>% 
+  summarise(n = sum(n)) %>% 
+  drop_na()
+```
+
+Lets take some two random station and look at the data by length:
+```{r}
+set.seed(31)
+IDS <-
+  hh %>% 
+  filter(year == 2018, 
+         id %in% unique(by.haul.positive$id)) %>% 
+  sample_n(2) %>% 
+  pull(id)
+by.haul.positive %>% 
+  filter(id %in% IDS) %>% 
+  select(id, length, n) %>% 
+  spread(id, n) %>% 
+  knitr::kable()
+```
+
+We observe that the fish reported in different haul do not "cover" the same length classes. Now although this is expected, when summarizing the data we need to take this into account. The "missingness" means implicitly that the value are effectively zero.
+
+We also observe that we have a mixture of measurements, some (likely) only measuring the fish to the nearest centimeter in other cases to the nearest millimeter. So before proceeding lets "collapse" the length measurements to the nearest centimeter:
+
+```{r}
+Latin <- "Melanogrammus aeglefinus"
+by.haul.positive <- 
+  hl %>% 
+  filter(latin == Latin) %>% 
+  mutate(length = floor(length)) %>% 
+  group_by(id, latin, length) %>% 
+  summarise(n = sum(n)) %>% 
+  drop_na()
+```
+
+Note: The value of the length variable is to be understood as the lower boundary of a 1 centimeter bin. I.e. a length value of 10 represents a fish between 10-10.99... centimeters. 
+
+To take into account the "missingness" we could take the same approach as when we were coding for more than one species, i.e. we generate a full matrix of lengths at each station.
+
+```{r}
+all <- 
+  hh %>% 
+  filter(haulval == "V") %>% 
+  # Lets only carry forward variables "needed"
+  select(id, year, quarter, shootlong, shootlat, faoarea) %>% 
+  crossing(length = sort(unique(by.haul.positive$length)),
+           latin = unique(by.haul.positive$latin))
+```
+
+So we started with a haul dataframe with `r hh %>% filter(haulval == "V") %>% nrow()` observations and ending up with the "all" dataframe of some `r nrow(all)` records. This is a result of the unique length classes for the selected species is `r length(unique(by.haul.positive$length))`.
+
+We now merge the dataframes so that we have a "complete matrix" of length, Latin and number of fish for each haul:
+```{r}
+by.haul <- 
+  all %>% 
+  left_join(by.haul.positive) %>% 
+  mutate(n = replace_na(n, 0),
+         wt = n * 0.00001 * (length + 0.5)^3)
+```
+
+We can now calculate the mean catch per length class per year:
+```{r}
+cpue <- 
+  by.haul %>% 
+  group_by(year, quarter, length) %>% 
+  summarise(hauls = n(),
+            n = mean(n),
+            wt = mean(wt))
+```
+
+and create a plot
+```{r, fig.height = 9}
+cpue %>% 
+  filter(year >= 2004) %>% 
+  ggplot(aes(length, wt, colour = factor(quarter))) +
+  geom_line() +
+  scale_color_brewer(palette = "Set1") +
+  facet_grid(year ~ .) +
+  labs(x = "Length [cm]",
+       y = "Mean number of fish",
+       colour = "Quarter",
+       title = paste0(Latin, ": Mean number of fish per 1 hour"))
+```
+
+Take note that we can easily repeat the calculation of catch-per-unit-effort by year as done in the first subsection above using the "by.haul" dataframe above (not run):
+```{r, eval = FALSE}
+by.haul %>% 
+  group_by(id, year, quarter, latin) %>% 
+  summarise(n = sum(n),
+            wt = sum(wt)) %>% 
+  ungroup() %>% 
+  mutate(year = year + 0.25 * quarter - 0.125) %>% 
+  ggplot(aes(year, wt, colour = factor(quarter))) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
+  expand_limits(y = 0) +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = NULL, y = NULL,
+       colour = "Quarter",
+       title = "Mean catch [kg] per 1 hour haul",
+       subtitle = "Bootstrap mean and one standard error") +
+  facet_wrap(~ latin, scale = "free_y")
+```
+
+
+## Emulating DATRAS service product
+
+NOTE: Some intro notes here ...
 
 ```{r}
 common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
@@ -202,7 +458,44 @@ cpue <-
   filter(!is.na(length))
 ```
 
-#### Comparison Datras service product
+```{r}
+# comparision with the datras-product
+Latin <- "Pleuronectes platessa"
+d1 <- 
+  cpue %>% 
+  id_separate(remove = FALSE) %>% 
+  filter(latin == Latin,
+         year == 2016,
+         quarter == 1) %>% 
+  select(id, latin, length, n) %>% 
+  mutate(length = as.integer(length * 10),
+         source = "tidy") %>% 
+  arrange(id, length, n)
+fi <- 
+  "data-raw/CPUE per length per haul per hour_2018-06-30 15_34_50.csv"
+d2 <-
+  read_csv(fi, na = "-9") %>% 
+  rename_all(tolower) %>% 
+  filter(species == Latin,
+         year == 2016,
+         quarter == 1) %>% 
+  id_unite() %>% 
+  select(id, 
+         latin = species, 
+         length = lngtclass, 
+         n = cpue_number_per_hour) %>% 
+  as_tibble() %>% 
+  mutate(source = "datras") %>% 
+  arrange(id, length, n)
+d1 %>% 
+  bind_rows(d2) %>% 
+  spread(source, n) %>% 
+  mutate(diff = !near(tidy, datras, tol = 1e-4)) %>% 
+  filter(diff) 
+```
+
+
+
 
 ```{r, message = FALSE, warning = FALSE}
 cpue2 <-
@@ -285,74 +578,6 @@ cpue.datras.service.product %>%
 ```
 
 We have only 20, 30 and 40 cm fish. So it seems like in the dsp the length class are treated as millimeters that are then converted to centimeters by rounding.
-
-### Some simple summaries
-
-```{r, message = FALSE, warning = FALSE}
-d <-
-  cpue %>% 
-  mutate(b = n * 1e-5 * length^3) %>% 
-  group_by(id, latin) %>% 
-  summarise(n = sum(n),
-            b = sum(b)) %>%
-  separate(id, c("year", "quarter", "ship", "gear", "haulno"), convert = TRUE) %>%
-  mutate(year = year + quarter/4)
-
-d %>% 
-  ggplot(aes(year, n, colour = factor(quarter))) +
-  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
-  expand_limits(y = 0) +
-  facet_wrap(~ latin, scale = "free_y") +
-  scale_color_brewer(palette = "Set1") +
-  labs(x = NULL, y = NULL,
-       colour = "Quarter",
-       title = "Annual abundance",
-       subtitle = "Bootstrap mean and confidence interval of individual standardized tow duration [60 minutes]")
-d %>% 
-  ggplot(aes(year, b, colour = factor(quarter))) +
-  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
-  expand_limits(y = 0) +
-  facet_wrap(~ latin, scale = "free_y") +
-  scale_color_brewer(palette = "Set1") +
-  scale_x_continuous(name = NULL, breaks = seq(1960, 2020, by = 10)) +
-  scale_y_continuous(name = NULL, labels = NULL) +
-  labs(colour = "Quarter",
-       title = "Annual biomass",
-       subtitle = "Bootstrap mean and confidence interval of individual standardized tow duration [60 minutes]")
-```
-
-
-```{r, message = FALSE, warning = FALSE}
-d <-
-  cpue %>%
-  mutate(b = n * 0.01 * length^3) %>% 
-  id_separate() %>% 
-  group_by(year, quarter, latin, length) %>% 
-  summarise(n = sum(n),
-            b = sum(b)) %>% 
-  ungroup()
-d %>%
-  filter(latin == "Melanogrammus aeglefinus",
-         year >= 1998,
-         quarter == 1,
-         between(length, 9, 45)) %>% 
-  ggplot(aes(length,  as.factor(year), group = year, height = n/1e5)) +
-  geom_ridgeline(stat = "identity", scale = 5, alpha = 0.5)
-d %>%
-  filter(latin == "Gadus morhua",
-         year >= 2000,
-         quarter == 1,
-         between(length, 5, 100)) %>% 
-  ggplot(aes(length,  as.factor(year), height = n/1e3)) +
-  geom_ridgeline(stat = "identity", scale = 3, alpha = 0.5) +
-  scale_x_continuous(breaks = seq(0, 120, by = 10))
-d %>%
-  filter(latin == "Pleuronectes platessa",
-         year >= 2000,
-         quarter == 1) %>% 
-  ggplot(aes(length, as.factor(year), height = n/1e3)) +
-  geom_ridgeline(stat = "identity", alpha = 0.5)
-```
 
 
 ## Field names

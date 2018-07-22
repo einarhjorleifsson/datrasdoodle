@@ -126,7 +126,46 @@ hh %>%
   summarise(m = mean(n))
 ```
 
+## On missingness {#onmissingness}
 
+TODO: Write a better intro
+
+Lets take a little detour and look at a simplified example on why the above will not work. Say we have the following:
+```{r}
+hh2 <- tibble(id = c(1, 2, 3))
+hl2 <- tibble(
+  id = c(1:2, 1),
+  species = c("cod", "plaice", "plaice"),
+  length = c(20, 25, 30),
+  n = c(3, 4, 5)
+)
+hh2
+hl2
+```
+
+So we have 3 hauls, with one haul were both species are recorded, one haul were only one of the species is recorded and then one haul with no catch of neither species.
+```{r}
+by.haul.positive2 <-
+  hl2 %>% 
+  group_by(id, species) %>% 
+  summarise(n = sum(n))
+by.haul.positive2
+```
+
+The simplest way to include implicitly missing species is to first generate a dataframe that contains all the hauls and species combination before one does the left join with the count data. Here we use the function crossing (similar to the base function expand.grid):
+```{r}
+all <- 
+  hh2 %>% 
+  crossing(species = by.haul.positive2$species) 
+all
+```
+
+Here we have a combination of all hauls and all species (3 x 3). So when we do a left-join with the count data we will join the tables by both the id and the Latin name:
+```{r}
+all %>% 
+  left_join(by.haul.positive2) %>% 
+  mutate(n = replace_na(n, 0))
+```
 ## North sea roundfish area {#nsrf}
 
 ```{r, message = FALSE}
