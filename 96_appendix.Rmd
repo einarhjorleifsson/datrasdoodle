@@ -69,7 +69,7 @@ download.file("http://www.hafro.is/~einarhj/data/Exchange\ Data_2011-10-05\ 16_3
 icesDatras::getDATRAS(record = "HH",
                       survey = "NS-IBTS",
                       year = 2007:2018, 
-                      quarter = 1) %>% 
+                      quarter = c(1, 3)) %>% 
   write_rds("data/tutorial/raw_hh.rds")
 ```
 
@@ -339,7 +339,7 @@ The aim of this exercise is download ICES exchange format data from www.ices.dk,
 icesDatras::getDATRAS(record = "HL",
                       survey = "NS-IBTS",
                       year = 2007:2018, 
-                      quarter = 1) %>% 
+                      quarter = c(1, 3)) %>% 
   write_rds("data/tutorial/raw_hl.rds")
 ```
 
@@ -608,7 +608,9 @@ nfish <-
 
 # Put on absolute time (qtrend).
 
-nfish$qtrend <- qtrend.f(nfish$year,nfish$quarter,start.year=min(nfish$year))
+nfish$qtrend <- qtrend.f(nfish$year,
+                         nfish$quarter,
+                         start.year=min(nfish$year))
 
 par(mfrow=c(2,1),mar=c(2,4,2,2))
 plot(nfish$qtrend,nfish$cpue.by.n,type='b',xlab='time',ylab='cpue',xaxt='n');title('cpue by n')
@@ -665,14 +667,29 @@ fish <-fish[!is.na(fish$haullong),]      # sometimes there are incomplete chron 
 
 fish$cpue.by.n  <- fish$hlno/fish$hauldur # divide catch by effort (n)
 fish$cpue.by.wt <- fish$hlwt/fish$hauldur # divide catch by effort (weight)
+# average cpues caught over year and quarter
+nfish2 <- 
+  aggregate(list(cpue.by.n=fish$cpue.by.n,
+                 cpue.by.wt=fish$cpue.by.wt),
+            list(scientific.name=fish$scientific.name,
+                 year=fish$year,
+                 quarter=fish$quarter,
+                 shootlat=fish$shootlat,
+                 shootlong=fish$shootlong),
+            mean,
+            na.rm=T)
+# investigate the range of the data to get year quarter combination to plot
+table(nfish2$year,nfish2$quarter)         
 
-nfish2 <- aggregate(list(cpue.by.n=fish$cpue.by.n,cpue.by.wt=fish$cpue.by.wt),
-list(scientific.name=fish$scientific.name,year=fish$year,quarter=fish$quarter,shootlat=fish$shootlat,shootlong=fish$shootlong),mean,na.rm=T) # average cpues caught over year and quarter
-
-table(nfish2$year,nfish2$quarter)         # investigate the range of the data to get year quarter combination to plot
-
-par(mfrow=c(1,1))                         # plot data for quarter 3 2007
-plotMapBlobs(input=nfish2,what.year=2007,what.quarter=1,what.cpue='cpue.by.n',xlim0=c(-15,15),ylim0=c(48,62),scaling.factor=.5)
+# plot data for quarter 3 2007
+par(mfrow=c(1,1))                         
+plotMapBlobs(input=nfish2,
+             what.year=2007,
+             what.quarter=1,
+             what.cpue='cpue.by.n',
+             xlim0=c(-15,15),
+             ylim0=c(48,62),
+             scaling.factor=.5)
 
 # Compare spatial distributions among groups of years
 
@@ -680,7 +697,13 @@ print(sort(unique(nfish2$year)))  # how many years ? adjust mfrow accordingly & 
 
 par(mfrow=c(2,2),cex.main=.8)
 for(i in 2007:2010){
-plotMapBlobs(input=nfish2,what.year=i,what.quarter=1,what.cpue='cpue.by.n',xlim0=c(-2,8),ylim0=c(48,62),scaling.factor=.5) 
+plotMapBlobs(input=nfish2,
+             what.year=i,
+             what.quarter=1,
+             what.cpue='cpue.by.n',
+             xlim0=c(-2,8),
+             ylim0=c(48,62),
+             scaling.factor=.5) 
 }
 ```
 
@@ -717,28 +740,68 @@ chrons.yq <- chrons[chrons$quarter== what.quarter & chrons$year == what.year,] #
 maps of total weights (not run, overlay function depreciated)
 ```{r, fig.width = 7.5, fig.height = 6.5, error = TRUE}
 #source("TrawlSurveyGridPlot_test.r")
-wts <-TrawlSurveyGridPlot(fish.yq, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
-nameVarToSum="hlwtatlngt",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
-legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",addICESgrid=TRUE,legendtitle="weights")
+wts <-
+  TrawlSurveyGridPlot(fish.yq, 
+                      we=we,ea=ea,so=so,no=no,
+                      nameLon = "shootlong", 
+                      nameLat = "shootlat",
+                      plotMap=T,
+                      nameVarToSum="hlwtatlngt",
+                      cellsizeX = grid.size.x,
+                      cellsizeY = grid.size.y,
+                      legendx='bottomright',
+                      numcats=10,
+                      plotPoints=T,
+                      legendncol=2,
+                      paletteCats = "topo.colors",
+                      addICESgrid=TRUE,
+                      legendtitle="weights")
 ```
 
 maps of total numbers (not run, overlay function depreciated)
 ```{r, fig.width = 7.5, fig.height = 6.5, error = TRUE}
-nos <-TrawlSurveyGridPlot(fish.yq, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
-nameVarToSum="hlnoatlngt",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
-legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",outGridFile="text.txt",addICESgrid=TRUE,legendtitle="numbers")
+nos <-
+  TrawlSurveyGridPlot(fish.yq,
+                      we=we,ea=ea,so=so,no=no,
+                      nameLon = "shootlong",
+                      nameLat = "shootlat",
+                      plotMap=T,
+                      nameVarToSum="hlnoatlngt",
+                      cellsizeX = grid.size.x,
+                      cellsizeY = grid.size.y,
+                      legendx='bottomright',
+                      numcats=10,plotPoints=T,
+                      legendncol=2,
+                      paletteCats = "topo.colors",
+                      outGridFile="text.txt",
+                      addICESgrid=TRUE,
+                      legendtitle="numbers")
 
 # map of trawling effort from chron files
 
-effort<-TrawlSurveyGridPlot(chrons.yq, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
-nameVarToSum="hauldur",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
-legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats="heat.colors",addICESgrid=TRUE,legendtitle="minutes trawled")
+effort<-
+  TrawlSurveyGridPlot(chrons.yq,
+                      we=we,ea=ea,so=so,no=no,
+                      nameLon = "shootlong",
+                      nameLat = "shootlat",
+                      plotMap=T,
+                      nameVarToSum="hauldur",
+                      cellsizeX = grid.size.x,
+                      cellsizeY = grid.size.y,
+                      legendx='bottomright',
+                      numcats=10,plotPoints=T,
+                      legendncol=2,
+                      paletteCats="heat.colors",
+                      addICESgrid=TRUE,
+                      legendtitle="minutes trawled")
 
 
 # Cpue using the output from TrawlSurveyGridPlot
 
-im.nos <-  as.image.SpatialGridDataFrame(nos, attr=2)     # extract nos from output of TrawlSurveyGridPlot
-im.eff <-  as.image.SpatialGridDataFrame(effort, attr=2)  # extract effort from output of TrawlSurveyGridPlot
+# extract nos from output of TrawlSurveyGridPlot
+im.nos <-  as.image.SpatialGridDataFrame(nos, attr=2)
+# extract effort from output of TrawlSurveyGridPlot
+im.eff <-  as.image.SpatialGridDataFrame(effort, attr=2)  
 
 im.cpue <- im.nos
 im.cpue$z <- im.nos$z/im.eff$z                             # divide catch by effort
@@ -748,9 +811,11 @@ im.cpue$z <- im.nos$z/im.eff$z                             # divide catch by eff
 #data(nwestBathy)   # North west
 
 library(fields)
-
-image.plot(im.nos$x,im.cpue$y,log(im.cpue$z+1),col=topo.colors(10),xlab='',ylab='',xlim=c(-5,8))                     # plot the data on a map
-#contour(nseaBathy$x,nseaBathy$y,nseaBathy$z,add=T,level=c(20,40,60),col='black')         # add on depth contour
+# plot the data on a map
+image.plot(im.nos$x,im.cpue$y,log(im.cpue$z+1),col=topo.colors(10),
+           xlab='',ylab='',xlim=c(-5,8))
+# add on depth contour
+#contour(nseaBathy$x,nseaBathy$y,nseaBathy$z,add=T,level=c(20,40,60),col='black')         
 #contour(nwestBathy$x,nwestBathy$y,nwestBathy$z,add=T,level=c(100,200,500,1000,2000,4000),col='black') 
 
 map("worldHires", add=TRUE, col='darkseagreen', fill=TRUE, bg="white",
@@ -777,7 +842,7 @@ regions=c('uk','ireland','france','germany','netherlands', 'norway','belgium',
 icesDatras::getDATRAS(record = "CA",
                       survey = "NS-IBTS",
                       year = 2007:2018, 
-                      quarter = 1) %>%
+                      quarter = c(1, 3)) %>%
   readr::write_rds("data/tutorial/raw_ca.rds")
 ```
 
@@ -785,8 +850,8 @@ icesDatras::getDATRAS(record = "CA",
 alk <- 
   read_rds("data/tutorial/raw_ca.rds") %>% 
   dplyr::rename_all(tolower)
-
-head(alk) # have a look at the data
+# have a look at the data
+dplyr::glimpse(alk)
 ```
 
 7. Standardise to cm length categories
@@ -798,12 +863,15 @@ alk$lngtclass[alk$lngtcode == 0] <- alk$lngtclass[alk$lngtcode == 0]/10
 ```{r}
 alk$lngtclass[alk$lngtcode != "5"] <- round(alk$lngtclass[alk$lngtcode != "5"])
 alk$lngtclass[alk$lngtcode != "5"] <- alk$lngtclass[alk$lngtcode != "5"]+0.5
-print(table(alk$lngtclass)) # print distribution of ALL length categories
-print(table(alk$age))      # print distribution of ALL ages
+# print distribution of ALL length categories
+#print(table(alk$lngtclass))
+# print distribution of ALL ages
+#print(table(alk$age))
 ```
 9. Put on species name (see Practical 2).  
 ```{r}
-# alk$scientific.name <- as.character(tsn$completename[match(alk$speccode,tsn$tsn)])   # match scientific name onto species code 
+# match scientific name onto species code 
+# alk$scientific.name <- as.character(tsn$completename[match(alk$speccode,tsn$tsn)])
 alk <-
   alk %>% 
   dplyr::mutate(aphia = valid_aphia,
@@ -814,9 +882,11 @@ alk <-
   dplyr::select(-aphia) %>% 
   dplyr::rename(scientific.name = latin)
 
-sort(unique(alk$scientific.name)) # List of species with at least some age data
+# List of species with at least some age data
+# sort(unique(alk$scientific.name))
 # Note: you tend to only get more commercially important species being aged etc.
-table(alk$scientific.name,alk$age) # print distribution of ages by species (Note: this is for all ages combined).
+# print distribution of ages by species (Note: this is for all ages combined).
+#table(alk$scientific.name,alk$age)
 ```
 10. Tidy up
 ```{r}
@@ -830,26 +900,32 @@ alk$age <- as.numeric(as.character(alk$age))
 ```
 11. Select a species for a particular year and quarter and examine the age length key 
 ```{r}
-table(alk$year,alk$scientific.name) # investigate range of years covered for each species
-table(alk$quarter)                  # see range of quarters
+# investigate range of years covered for each species
+#table(alk$year,alk$scientific.name)
+# see range of quarters
+#table(alk$quarter)                  
 ```
 12. Chose a species, year and quarter to examine
 ```{r}
-what.species    <- 'Pleuronectes platessa'   
-what.year      <- 2007
-what.quarter   <- 1
+Latin          <- 'Gadus morhua'   
+what.year      <- 2014
+what.quarter   <- 3
 
-alk1 <- alk[alk$scientific.name == what.species & alk$year == what.year & alk$quarter == what.quarter,]
+alk1 <- 
+  alk[alk$scientific.name == Latin & 
+        alk$year == what.year & 
+        alk$quarter == what.quarter,]
+# create a table of the distribution of length by ages for the chosen species
+alk1t <- table(alk1$lngtclass, alk1$age) 
+# have a look at the age distribution by length
+#table(alk1t)
 
-alk1t<-table(alk1$lngtclass,alk1$age) # create a table of the distribution of length by ages for the chosen species
- 
-print(alk1t)                          # have a look at the age distribution by length
- 
-rowSms <- apply(alk1t,1,sum,na.rm=T) # use apply to calculate row sums
-
-alk1tp <- round(alk1t/rowSms,3)      # divide numbers by total to get proportions
-
-print(alk1tp)                        # have a look at the proportions
+# use apply to calculate row sums
+rowSms <- apply(alk1t,1,sum,na.rm=T)
+# divide numbers by total to get proportions
+alk1tp <- round(alk1t/rowSms,3)      
+# have a look at the proportions
+head(alk1tp)                        
 ```
 13. Plot the data.
 ```{r, fig.width = 7.5, fig.height = 6.5}
@@ -866,9 +942,16 @@ matplot(alk1tp,type='l',ylab='P(age)',xlab="Length(cms)")
 
 alk1tp[alk1tp==0] <- NA
 library(fields)
-image.plot(as.numeric(dimnames(alk1tp)[[1]]), as.numeric(dimnames(alk1tp)[[2]]),alk1tp,col=topo.colors(100),xlab='Length(cms)',ylab='P(age)')
-contour(as.numeric(dimnames(alk1tp)[[1]]), as.numeric(dimnames(alk1tp)[[2]]),alk1tp,add=T)
+image.plot(as.numeric(dimnames(alk1tp)[[1]]),
+           as.numeric(dimnames(alk1tp)[[2]]),
+           alk1tp,col=topo.colors(100),
+           xlab='Length(cms)',
+           ylab='P(age)')
+contour(as.numeric(dimnames(alk1tp)[[1]]),
+        as.numeric(dimnames(alk1tp)[[2]]),
+        alk1tp,add=T)
 ```
+
 14. Apply ALK to Length frequency data
 
 Simplest approach is to multiply the estimate of the proportion of each age at each length by the number of individuals at that length caught. If you do this you must ensure that you have a length in your ALK available for the corresponding length in your length frequency data.
@@ -877,7 +960,8 @@ Simplest approach is to multiply the estimate of the proportion of each age at e
 #  Again make sure to add on scientific name using TSN (downloaded from ITIS website). 
 #data(tsn)  # itis database of all species in the world
 #head(tsn)  # first 5 lines
-#lfs$scientific.name <- as.character(tsn$completename[match(lfs$speccode,tsn$tsn)])   # match scientific name 
+# match scientific name 
+#lfs$scientific.name <- as.character(tsn$completename[match(lfs$speccode,tsn$tsn)])
 # Tidy up
 #lfs <- lfs[!duplicated(lfs),]                  #  remove any duplicates
 #lfs <- lfs[lfs$speccode != -9,]                #  remove missing species codes
@@ -889,23 +973,23 @@ Simplest approach is to multiply the estimate of the proportion of each age at e
 # Standardise length codes to cms (some are in mms).
 #lfs$lngtclass[lfs$lngtcode == "."] <- lfs$lngtclass[lfs$lngtcode == '.']/10
 #lfs$lngtclass[lfs$lngtcode == "0"] <- lfs$lngtclass[lfs$lngtcode == "0"]/10
-lfs$lngtclass[lfs$lngtcode != "5"] <- round(lfs$lngtclass[lfs$lngtcode != "5"])  # Don't do this to fish binned at 5cm intervals
-lfs$lngtclass[lfs$lngtcode != "5"] <- lfs$lngtclass[lfs$lngtcode != "5"]+0.5
+#lfs$lngtclass[lfs$lngtcode != "5"] <- round(lfs$lngtclass[lfs$lngtcode != "5"])  # Don't do this to fish binned at 5cm intervals
+#lfs$lngtclass[lfs$lngtcode != "5"] <- lfs$lngtclass[lfs$lngtcode != "5"]+0.5
 # Useful to insert a weight for each length category for each species.
 # Remember that this is usually done with parameters (a & b) from
 # non-linear equations where Weight in grammes = aL^b  where L = length.
 #data(length.weight)
 # Match a and b parameters onto the correct species
-lfs$a <- length.weight$a[match(lfs$scientific.name,length.weight$scientific.name)]
-lfs$b <- length.weight$b[match(lfs$scientific.name,length.weight$scientific.name)]
+#lfs$a <- length.weight$a[match(lfs$scientific.name,length.weight$scientific.name)]
+#lfs$b <- length.weight$b[match(lfs$scientific.name,length.weight$scientific.name)]
 # Use the parameters to estimate the weight in kgs.  Remember that weight = aL^b
-lfs$hlwtatlngt<-((lfs$a*lfs$lngtclass^lfs$b)*lfs$hlnoatlngt) /1000
+#lfs$hlwtatlngt<-((lfs$a*lfs$lngtclass^lfs$b)*lfs$hlnoatlngt) /1000
 ```
 
 15. Extract a species to 'play' with. Remember that this should be one for which age length keys are available.
 
 ```{r}
-plaice <- lfs[lfs$scientific.name == 'Pleuronectes platessa',]
+lfs.sp <- lfs[lfs$scientific.name == Latin,]
 ```
 16. Get the chrons (e.g. Practical01) because it's easier to use them to estimate effort at different spatial levels of aggregation.
 ```{r}
@@ -916,27 +1000,36 @@ plaice <- lfs[lfs$scientific.name == 'Pleuronectes platessa',]
 ```
 17. Make sure we have zeros in the dataset for stations that were trawled but no individuals caught.
 ```{r}
-merged.plaice  <- mergeChronsLfs(chrons=chrons,length.frequencies=plaice)
-fish <- merged.plaice 
+merged.sp  <- mergeChronsLfs(chrons=chrons,length.frequencies=lfs.sp)
+fish <- merged.sp
 ```
 18. Calculate a very simple index to see the principles using the year quarter combination selected above.
 ```{r}
-lf1 <- fish[fish$year == what.year & fish$quarter == what.quarter,]  # select dat for what.year and what.quarter
-head(lf1)
-lf2 <- tapply(lf1$hlnoatlngt,lf1$lngtclass,sum,na.rm=T) # the total sum of individuals caught on that survey 
-print(lf2) #Examine the data
+# select dat for what.year and what.quarter
+lf1 <- fish[fish$year == what.year & fish$quarter == what.quarter,]
+dplyr::glimpse(lf1)
+# the total sum of individuals caught on that survey 
+lf2 <- tapply(lf1$hlnoatlngt,
+              lf1$lngtclass,sum,na.rm=T)
+#Examine the data
+lf2
 # See if the available lengths correspond to the available aged lengths
 length(lf2)
 dim(alk1tp)
 alk2tp <- data.frame(alk1tp)
-dimnames(alk2tp)[[2]] <- c("lngtclass","age","p")   # Convert to a dataframe which can make life easier (relational database format)
-alk2tp$lngtclass <- as.numeric(as.character(alk2tp$lngtclass))  # Make 'factors' into 'characters'
-alk2tp$age <- as.numeric(as.character(alk2tp$age))              # 
-head(alk2tp)
+# Convert to a dataframe which can make life easier (relational database format)
+dimnames(alk2tp)[[2]] <- c("lngtclass","age","p")
+# Make 'factors' into 'characters'
+alk2tp$lngtclass <- as.numeric(as.character(alk2tp$lngtclass))  
+alk2tp$age <- as.numeric(as.character(alk2tp$age))
+glimpse(alk2tp)
 # Match the length frequencies with the lengths
-alk2tp$hlnoatlngt <- lf2[match(alk2tp$lngtclass,as.numeric(dimnames(lf2)[[1]]))]
-alk2tp$no.at.age  <- alk2tp$hlnoatlngt * alk2tp$p         # multiply the frequencies by the proportions
-alk2tp$no.at.age[is.na(alk2tp$no.at.age)] <- 0            # replace Nas with zeros
+alk2tp$hlnoatlngt <-
+  lf2[match(alk2tp$lngtclass,as.numeric(dimnames(lf2)[[1]]))]
+# multiply the frequencies by the proportions
+alk2tp$no.at.age  <- alk2tp$hlnoatlngt * alk2tp$p
+# replace Nas with zeros
+alk2tp$no.at.age[is.na(alk2tp$no.at.age)] <- 0            
 # create the most straightforward index possible for that survey
 index <- aggregate(list(no.at.age=alk2tp$no.at.age),list(age=alk2tp$age),sum,na.rm=T)
 ```
@@ -949,9 +1042,12 @@ plot(index$age,index$no.at.age,ylab='nos at age', xlab='age',type='b',lwd=1)  # 
 plot(index$age,log(index$no.at.age+1),ylab='nos at age', xlab='age',type='b')   # Log scale
 abline(lm(log(no.at.age+1)~age,data=index),lty=3,col='blue')
 ```
+
 19. Now create a dataset of numbers by age per ICES statistical rectangle using the function NosatAgebyYearStatSquare
 ```{r, fig.width = 7.5, fig.height = 6.5}
-out <- NosatAgebyYearStatSquare(lfdat = merged.plaice,alk = alk, chrons=chrons,  what.species ='Pleuronectes platessa') 
+out <- NosatAgebyYearStatSquare(lfdat = merged.sp,
+                                alk = alk, chrons=chrons,  
+                                what.species = Latin) 
 print(head(out))
 # Plot the nos by year age and stat rectangle.
 library(lattice)
@@ -960,18 +1056,32 @@ xyplot(log(hlnoatage)~year|age,groups=statrec,type='l',data=out)
 20. Compare indices calculated in different ways
 ```{r, fig.width = 7.5, fig.height = 6.5}
 # total numbers divided by total effort
-a <- aggregate(list(hlnoatage=out$hlnoatage), list(age=out$age,year=out$year),sum,na.rm=T) # sum the total numbers
-hd <- aggregate(list(haulduration=chrons$hauldur/60), list(year=chrons$year),sum,na.rm=T)            # sum the effort 
-b0 <- merge(a,hd,all=T)                        # merge
-b0$cpue <- b0$hlnoatage/b0$haulduration        # calculate cpue
+# sum the total numbers
+a <- aggregate(list(hlnoatage=out$hlnoatage),
+               list(age=out$age,year=out$year),
+               sum,
+               na.rm=T)
+# sum the effort 
+hd <- aggregate(list(haulduration=chrons$hauldur/60),
+                list(year=chrons$year),
+                sum,
+                na.rm=T)            
+b0 <- merge(a,hd,all=T)
+# calculate cpue
+b0$cpue <- b0$hlnoatage/b0$haulduration
 b0 <- b0[!is.na(b0$hlnoatage),]
 print(head(b0)) # examine the data b0
 # versus AVERAGE of the separate cpue in each statistical rectangle
 out$cpue <- out$hlnoatage/out$haulduration
-b1 <- aggregate(list(cpue=out$cpue), list(age=out$age,year=out$year),mean,na.rm=T)
+b1 <- aggregate(list(cpue=out$cpue), 
+                list(age=out$age,
+                     year=out$year),
+                mean,
+                na.rm=T)
 print(head(b1))
 # Plot them both to compare
-par(mfrow=c(3,4),mar=c(2,2,3,2))     # This bit just finds the range of the data for plotting
+# This bit just finds the range of the data for plotting
+par(mfrow=c(3,4),mar=c(2,2,3,2))
 u.ages <- sort(unique(b0$age))
 r0 <- tapply(b0$cpue,b0$age,range)
 r1 <- tapply(b1$cpue,b1$age,range)
@@ -985,9 +1095,14 @@ for(i in u.ages) {
   lines(b1$year[b1$age==i],b1$cpue[b1$age==i],type='l',col='blue')
   title(paste('age',i,sep=' '),cex.main=1.2)    }
 ```
+
 20. Now create a dataset of numbers by age each station (eg. by lat and long) using the function NosatAgebyYearLonLat
 ```{r}
-out <- NosatAgebyYearLonLat(lfdat = merged.plaice,alk = alk, chrons=chrons,  what.species ='Pleuronectes platessa') 
+out <- 
+  NosatAgebyYearLonLat(lfdat = merged.sp,
+                       alk = alk,
+                       chrons=chrons,  
+                       what.species = Latin) 
 out[1:5,]                                        # First 5 lines
 out$cpue.by.n <- out$hlnoatage/out$haulduration  # add on CPUE 
 out$cpue.by.wt <- out$hlwtatage/out$haulduration
@@ -997,43 +1112,86 @@ out$cpue.by.wt <- out$hlwtatage/out$haulduration
 On a bubble plots
 ```{r, fig.width = 7.5, fig.height = 6.5}
 par(mfrow=c(1,1))
-plotMapBlobs(out[out$age==3,],what.quarter=1,what.year = 2007,what.cpue='cpue.by.n',xlim0=c(-16,12),ylim0=c(45,62),scaling.factor=.5)
+plotMapBlobs(out[out$age==3,],
+             what.quarter=1,
+             what.year = 2007,
+             what.cpue='cpue.by.n',
+             xlim0=c(-16,12),
+             ylim0=c(45,62),
+             scaling.factor=.5)
 ```
+
 Or a grid
 ```{r, fig.width = 7.5, fig.height = 6.5, eval = FALSE}
-grid.size.y <- .5                                                # grid size here is ICES statistical rectangle but this is entirely flexible
+# grid size here is ICES statistical rectangle but this is entirely flexible
+grid.size.y <- .5                                                
 grid.size.x <- 1  
 
-we <- -16                                                        # east and west boundaries
+# east and west boundaries
+we <- -16                                                        
 ea <- 10
 so <- 48
 no <- 62
 
-par(mfrow=c(1,1))                                                # number of plots
+# number of plots
+par(mfrow=c(1,1))                                                
 
 out3 <- out[is.na(out$age) | out$age==3 & out$year ==2007,]
 
 
-nos <-TrawlSurveyGridPlot(out3, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
-nameVarToSum="hlnoatage",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
-legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",addICESgrid=TRUE,legendtitle="nos")
- 
-effort <-TrawlSurveyGridPlot(out3, we=we,ea=ea,so=so,no=no,nameLon = "shootlong", nameLat = "shootlat",plotMap=T,
-nameVarToSum="haulduration",cellsizeX = grid.size.x, cellsizeY = grid.size.y,
-legendx='bottomright',numcats=10,plotPoints=T,legendncol=2,paletteCats = "topo.colors",addICESgrid=TRUE,legendtitle="haul duration")
-      
-im.nos <-  as.image.SpatialGridDataFrame(nos, attr=2)      # extract nos from output of TrawlSurveyGridPlot
-im.eff <-  as.image.SpatialGridDataFrame(effort, attr=2)   # extract effort from output of TrawlSurveyGridPlot
+nos <-
+  TrawlSurveyGridPlot(out3, 
+                      we=we,ea=ea,so=so,no=no,
+                      nameLon = "shootlong", 
+                      nameLat = "shootlat",
+                      plotMap=T,
+                      nameVarToSum="hlnoatage",
+                      cellsizeX = grid.size.x, 
+                      cellsizeY = grid.size.y,
+                      legendx='bottomright',
+                      numcats=10,
+                      plotPoints=T,
+                      legendncol=2,
+                      paletteCats = "topo.colors",
+                      addICESgrid=TRUE,
+                      legendtitle="nos")
+
+effort <- 
+  TrawlSurveyGridPlot(out3,
+                      we=we,ea=ea,so=so,no=no,
+                      nameLon = "shootlong", 
+                      nameLat = "shootlat",plotMap=T,
+                      nameVarToSum="haulduration",
+                      cellsizeX = grid.size.x, 
+                      cellsizeY = grid.size.y,
+                      legendx='bottomright',
+                      numcats=10,
+                      plotPoints=T,
+                      legendncol=2,
+                      paletteCats = "topo.colors",
+                      addICESgrid=TRUE,
+                      legendtitle="haul duration")
+
+# extract nos from output of TrawlSurveyGridPlot
+im.nos <-  as.image.SpatialGridDataFrame(nos, attr=2)
+# extract effort from output of TrawlSurveyGridPlot
+im.eff <-  as.image.SpatialGridDataFrame(effort, attr=2)   
 
 im.cpue <- im.nos
-im.cpue$z <- im.nos$z/im.eff$z                             # divide catch by effort
+# divide catch by effort
+im.cpue$z <- im.nos$z/im.eff$z                             
 
-#data(nseaBathy)                                            # North Sea
-#data(nwestBathy)                                           # North west
+#data(nseaBathy)  # North Sea
+#data(nwestBathy) # North west
 
 library(fields)
-
-image.plot(im.nos$x,im.cpue$y,log(im.cpue$z+1),col=topo.colors(10),xlab='',ylab='')                     # plot the data on a map
+# plot the data on a map
+image.plot(im.nos$x,
+           im.cpue$y,
+           log(im.cpue$z+1),
+           col=topo.colors(10),
+           xlab='',
+           ylab='')                     
 #contour(nseaBathy$x,nseaBathy$y,nseaBathy$z,add=T,level=c(20,40,60),col='black')         # add on depth contour
 #contour(nwestBathy$x,nwestBathy$y,nwestBathy$z,add=T,level=c(100,200,500,1000,2000,4000),col='black') 
 
@@ -1044,30 +1202,34 @@ regions=c('uk','ireland','france','germany','netherlands', 'norway','belgium',
 'tunisia','algeria','egypt' ))
 ```
 
-
 Multi-nomial logit modeling of age length keys. The problem is that the data are packed full of missing lengths at various categories. The problem with the simple arithmetic approach above is that there are often no data available. There may be instances where data can be modeled over missing length categories to provide more information.
 ```{r, eval = FALSE}
+# NOT RUN
 alk <- parseExchangeFormatALKs(wd="/home/einarhj/r/Pakkar/datrasr")
 #Note: There is something wrong with the French IBTS data? 
-#alk$lngtclas[alk$ship == 'THA2' & alk$year ==2006] <- alk$lngtclas[alk$ship == 'THA2' & alk$year ==2006]/10
+#alk$lngtclas[alk$ship == 'THA2' & alk$year ==2006] <- 
+#    alk$lngtclas[alk$ship == 'THA2' & alk$year ==2006]/10
 alk$lngtclass[alk$lngtcode == "."] <- alk$lngtclass[alk$lngtcode == '.']/10
 alk$lngtclass[alk$lngtcode == 0]   <- alk$lngtclass[alk$lngtcode == 0]/10
 # Round it down
 alk$lngtclass <- round(alk$lngtclass)
-# Put on species name (see Practical 2).  
-alk$scientific.name <- as.character(tsn$completename[match(alk$speccode,tsn$tsn)])   # match scientific name onto species code 
+# Put on species name (see Practical 2).
+# match scientific name onto species code 
+alk$scientific.name <- as.character(tsn$completename[match(alk$speccode,tsn$tsn)])   
 #  Tidy up
-alk <- alk[!duplicated(alk),]     #  remove any duplicates
-alk <- alk[alk$speccode != -9,]   #  missing species codes
-alk <- alk[alk$lngtclass != -9,]  #  missing length classes
-alk <- alk[!is.na(alk$lngtcode),] #  missing length codes
+alk <- alk[!duplicated(alk),]
+alk <- alk[alk$speccode != -9,]
+alk <- alk[alk$lngtclass != -9,]
+alk <- alk[!is.na(alk$lngtcode),]
 alk$age <- as.numeric(as.character(alk$age))
 # Select a species for a particular year and quarter and examine the age length key 
 # Chose a species, year and quarter to examine
 what.species    <- 'Gadus morhua' # These are examples.
 alk1 <- alk[alk$scientific.name == what.species,]
 #Extract the columns of interest
-alk2 <- data.frame(lngtclass=alk1$lngtclass,age=alk1$age,scientific.name = alk1$scientific.name)
+alk2 <- data.frame(lngtclass=alk1$lngtclass,
+                   age=alk1$age,
+                   scientific.name = alk1$scientific.name)
 xtabs(~age+lngtclass,data=alk2)     # examine the data
 # install.packages('mlogit') # Install package if necessary
 library(mlogit)

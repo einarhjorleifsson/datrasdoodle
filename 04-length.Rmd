@@ -332,6 +332,7 @@ In section above we started off by collapsing all size structured information. H
 
 ```{r}
 Latin <- "Pleuronectes platessa"
+
 by.haul.positive <- 
   hl %>% 
   filter(latin == Latin) %>% 
@@ -362,7 +363,7 @@ We observe that the fish reported in different haul do not "cover" the same leng
 We also observe that we have a mixture of measurements, some (likely) only measuring the fish to the nearest centimeter in other cases to the nearest millimeter. So before proceeding lets "collapse" the length measurements to the nearest centimeter:
 
 ```{r}
-Latin <- "Melanogrammus aeglefinus"
+Latin <- "Pleuronectes platessa"
 by.haul.positive <- 
   hl %>% 
   filter(latin == Latin) %>% 
@@ -397,6 +398,27 @@ by.haul <-
          wt = n * 0.00001 * (length + 0.5)^3)
 ```
 
+Lets now look at the two hauls we peeked at earlier (Table xxx):
+
+```{r}
+by.haul %>% 
+  filter(id %in% IDS) %>% 
+  select(id, length, n) %>% 
+  spread(id, n) %>% 
+  knitr::kable()
+```
+
+We have now a complete record for all lengths classes reported in the survey and for each of the length class we have the number of observations including zero counts. This includes hauls were no fish for a particular species was measured. As an example:
+
+```{r}
+by.haul %>% 
+  filter(id == "2018_1_58G2_GOV_10") %>% 
+  select(id, length, n) %>% 
+  knitr::kable()
+```
+
+Hence any statistical analysis done based on this data structure becomes consquently simple.
+
 We can now calculate the mean catch per length class per year:
 ```{r}
 cpue <- 
@@ -421,7 +443,7 @@ cpue %>%
        title = paste0(Latin, ": Mean number of fish per 1 hour"))
 ```
 
-Take note that we can easily repeat the calculation of catch-per-unit-effort by year as done in the first subsection above using the "by.haul" dataframe above (not run):
+Take note that we can easily repeat the calculation of catch-per-unit-effort by year as done in the first subsection above using the "by.haul" dataframe that does not have any "missingness" created in this subsection (not run):
 ```{r, eval = FALSE}
 by.haul %>% 
   group_by(id, year, quarter, latin) %>% 
@@ -440,6 +462,70 @@ by.haul %>%
   facet_wrap(~ latin, scale = "free_y")
 ```
 
+### A little convenient function
+
+In the above we got a little appreciation for not forgetting to take into account "missingness" in the DATRAS dataframes. It basically mean a little bit of extra coding where we both have to take the haul data and the length data into consideration. Since we may be doing this quite frequently a little convenient function, that uses the above codes as templates may be in order.
+
+```{r}
+cpue_per_length_per_haul <- function(hh, hl, Latin) {
+  
+  by.haul.positive <- 
+    hl %>% 
+    filter(latin == Latin) %>% 
+    mutate(length = floor(length)) %>% 
+    # Note: we are collapsing sex and maturity
+    group_by(id, latin, length) %>% 
+    summarise(n = sum(n)) %>% 
+    drop_na()
+  
+  all <- 
+    hh %>% 
+    filter(haulval == "V") %>% 
+    # Lets only carry forward variables "needed"
+    select(id, year, quarter) %>% 
+    crossing(length = sort(unique(by.haul.positive$length)),
+             latin = unique(by.haul.positive$latin))
+  
+  by.haul <- 
+    all %>% 
+    left_join(by.haul.positive) %>% 
+    mutate(n = replace_na(n, 0))
+  
+  return(by.haul)
+  
+}
+```
+
+For any species we can now just do:
+
+```{r, fig.height = 9}
+Latin <- "Solea solea"
+d <-
+  cpue_per_length_per_haul(hh, hl, Latin)
+
+d %>% 
+  group_by(year, quarter, length) %>% 
+  summarise(hauls = n(),
+            n = mean(n)) %>% 
+  filter(year %in% 1994:2018,
+         quarter == 1) %>% 
+  ggplot(aes(length, n)) +
+  geom_line() +
+  facet_wrap(~ year) +
+  labs(x = "Length [cm]",
+       y = "Mean number of fish",
+       colour = "Quarter",
+       title = paste0(Latin, ": Mean number of fish per 1 hour"))
+```
+
+... or even a little bootstrap on abundance by length :-)
+```{r}
+d %>% 
+  filter(year %in% 2018,
+         quarter == 1) %>% 
+  ggplot(aes(length, n)) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1)
+```
 
 ## Emulating DATRAS service product
 
@@ -451,7 +537,8 @@ common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
             "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
 cpue <- 
   # only valid hauls
-  cpue_per_length_per_haul(hh = hh %>% filter(haulval == "V", !is.na(nsarea)),
+  # Note: This is an inbuild function - not exactly the same as above
+  tidyices::cpue_per_length_per_haul(hh = hh %>% filter(haulval == "V", !is.na(nsarea)),
                            hl = hl) %>% 
   filter(latin %in% common) %>% 
   # debugging, this should be fixed upstream

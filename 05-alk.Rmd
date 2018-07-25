@@ -1,11 +1,9 @@
-# Age-length keys {#alk}
+# Age based indices {#alk}
 
 ```{r, warning = FALSE, message = FALSE}
 library(tidyverse)
 library(lubridate)
-library(viridis)
-library(ggmisc)
-library(tidyices)
+library(patchwork)
 ```
 
 ```{r}
@@ -14,182 +12,117 @@ hl <- read_rds("data/ns-ibts_hl.rds")
 ca <- read_rds("data/ns-ibts_ca.rds")
 ```
 
-## Quick overview
+## Converting length to age
 
-```{r, message = FALSE, warning = FALSE}
-# here ignore year, quarter and area
-alk <- 
-  ca %>% 
-  filter(!is.na(age)) %>% 
-  # get round fish area - not needed at this stage
-  left_join(hh %>% select(id, nsarea)) %>% 
-  # round length to the neares length class
-  #   ?? should one use floor here?
-  mutate(length = as.integer(round(length, 0))) %>% 
-  group_by(latin, age, length) %>% 
-  # not sure if i am supposed to summarise the noatalk
-  #  or just count the line, here count the lines
-  summarise(n = n()) %>% 
-  ungroup()
-# probability that a certain length class is of certain age
-alk <- 
-  alk %>% 
-  group_by(length) %>% 
-  mutate(p = n/sum(n, na.rm = TRUE))  %>% 
-  ungroup()
-alk %>% 
-  ggplot(aes(age, length, fill = p)) +
-  geom_raster() +
-  scale_fill_viridis(direction = -1)
-```
+### The principle
 
-We see in the figure above that something is rotten in the state of Denmark, "old" fish but with very small length. This is likely an error in the lngtcode field
+Length data are relatively cheap to record relative to age data, because for the latter one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work in addition to counting rings. Hence in surveys the length measurements are more numerous, the objective being to estimate with good accuracy the length distribution of the catch at each station while otoliths are only collected from a smaller subsample of the catch.
 
+The sub-samples of the age data is then used to calculate the probability of age for a given length class, generally called an age-length key (alk). This data is then used to split the length data into age classes.
+
+Lets summarize some length frequency and age-length data for one species in one survey:
 ```{r}
-alk %>% 
-  ggplot(aes(length, p, fill = factor(age))) + 
-  geom_col() + 
-  scale_fill_crayola(name = "Age") +
-  scale_x_continuous("Length [cm]", breaks = seq(0, 150, by = 10)) +
-  scale_y_continuous("Probability", breaks = seq(0, 1, by = 0.1))
-```
-
-Again the error creeps in.
-
-```{r}
-hl %>% 
-  filter(latin == "Gadus morhua") %>% 
-  mutate(length = round(length, 0)) %>% 
+Latin <- "Gadus morhua"
+lfs <-
+  hh %>% 
+  filter(year == 2014,
+         quarter == 3) %>% 
+  select(id) %>% 
+  left_join(hl, by = "id") %>% 
+  filter(latin == Latin) %>% 
+  mutate(length = floor(length)) %>% 
   group_by(length) %>% 
-  summarise(n = n()) %>% 
+  summarise(n = sum(n, na.rm = TRUE)) %>% 
+  drop_na()
+p1 <-
+  lfs %>% 
   ggplot(aes(length, n)) +
+  theme_grey() +
   geom_col() +
-  scale_x_continuous("Length [cm]", breaks = seq(0, 150, by = 10))
-alk %>% 
-  filter(length %in% c(40, 45, 50, 55, 60)) %>% 
-  ggplot(aes(age, p)) +
-  geom_point() +
-  geom_line() +
-  facet_grid(length ~ .)
-```
-
-## Year, quarter, species
-
-```{r}
-common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
-            "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
-            "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
-alk <- 
-  ca %>% 
-  filter(!is.na(age)) %>% 
-  # get round fish area - actually ignored here
-  left_join(hh %>% select(id, nsarea)) %>% 
-  filter(!is.na(nsarea)) %>% 
-  id_separate() %>% 
-  as_tibble() %>% 
-  # round length to the neares length class
-  #   ?? should one use floor here?
-  mutate(length = as.integer(round(length, 0))) %>% 
-  group_by(year, quarter, latin, age, length) %>% 
-  # not sure if i am supposed to summarise the noatalk
-  #  or just count the line, here count the lines
-  summarise(n = n()) %>% 
-  ungroup() %>%
-  group_by(year, quarter, latin, length) %>% 
-  mutate(p = n/sum(n, na.rm = TRUE))  %>% 
-  ungroup() %>% 
-  filter(latin %in% common)
-le <- 
-  cpue_per_length_per_haul(hh = hh, hl = hl) %>% 
-  id_separate() %>% 
-  group_by(year, quarter, latin, length) %>% 
+  labs(x = NULL,
+       subtitle = "Length frequency")
+alk <-
+  hh %>% 
+  filter(year == 2014,
+         quarter == 3) %>% 
+  select(id) %>% 
+  left_join(ca, by = "id") %>% 
+  filter(latin == Latin) %>% 
+  mutate(length = floor(length),
+         age = ifelse(age > 9, 9, age)) %>% 
+  group_by(age, length) %>% 
   summarise(n = sum(n)) %>% 
-  filter(latin %in% common)
-x <-
-  alk %>%
+  group_by(length) %>% 
+  mutate(p = n / sum(n, na.rm = TRUE)) %>% 
   select(-n) %>% 
-  left_join(le %>% mutate(length = length/10)) %>% 
-  group_by(year, quarter, latin, age) %>% 
-  summarise(n = sum(p * n, na.rm = TRUE))
-x %>% 
-  filter(latin == "Melanogrammus aeglefinus",
-         quarter == 1,
-         age %in% 1:10) %>% 
-  mutate(yc = year - age) %>% 
-  ggplot(aes(year, n, fill = factor(yc))) +
+  drop_na()
+p2 <-
+  alk %>% 
+  mutate(age = ifelse(age > 9, 9, age)) %>% 
+  ggplot(aes(length, p, fill = factor(age))) +
+  theme_grey() +
+  scale_fill_brewer(palette = "Set3") +
   geom_col() +
-  facet_grid(age ~ ., scale = "free_y") +
-  scale_fill_crayola() +
-  theme(legend.position = "none") +
-  scale_y_continuous(NULL, NULL) +
-  labs(x = NULL)
+  labs(x = "Length",
+       y = "Proportion",
+       fill = "Age",
+       subtitle = "Proportion of age at length")
+
+p1 + p2 + plot_layout(ncol = 1)
 ```
 
-## Comparison with datras service product
+In principle we want to split the each length class of the length distribution (top graph) into separate age groups based on the age-length key (lower graph). Visually this may be easy for the first mode, almost all fish in each length class belonging to age group 0. Beyond that, each length class is most often composed of more than one age groups. 
 
-### ALK
-
-**Pleuronectes platessa**:
-
-```{r, message = FALSE}
-alk.dsp <- read_csv("data-raw/ALK.csv")
-alk.dsp %>% filter(Species == "Pleuronectes platessa", Year == 2005, Quarter == 1) -> x
-x1 <-
-  x %>% 
-  gather(age, n, Age_0:Age_10, convert = TRUE) %>% 
-  mutate(n = as.integer(n)) %>%
-  separate(age, c("dummy", "age"), convert = TRUE) %>% 
-  filter(!is.na(n)) %>% 
-  group_by(age) %>% 
-  summarise(n.dsp = sum(n, na.rm = TRUE))
-d <- 
-  ca %>% 
-  right_join(hh %>% filter(haulval == "V", !is.na(nsarea)) %>% select(id)) %>% 
-  id_separate() %>% 
-  filter(latin == "Pleuronectes platessa",
-         year == 2005,
-         quarter == 1)
-x2 <-
-  d %>% 
-  group_by(age) %>% 
-  summarise(n.tidy = sum(n))
-x1 %>% 
-  full_join(x2)
+Lets look at the alk for the 70 cm length class:
+```{r}
+alk %>% 
+  filter(length == 70) %>% 
+  knitr::kable()
 ```
 
-**Merlangus merlangus**:
+Here we have 5 age-classes in the length class, the most numerous ones being age 3 (50%), then 4 (22%) and 5 (17%), while around 6% of the fish are of age 2 and 6.
 
-```{r, message = FALSE}
-alk.dsp <- read_csv("data-raw/ALK.csv")
-alk.dsp %>% filter(Species == "Merlangius merlangus", Year == 2005, Quarter == 1) -> x
-x1 <-
-  x %>% 
-  gather(age, n, Age_0:Age_10, convert = TRUE) %>% 
-  mutate(n = as.integer(n)) %>%
-  separate(age, c("dummy", "age"), convert = TRUE) %>% 
-  filter(!is.na(n)) %>% 
-  group_by(age) %>% 
-  summarise(n.dsp = sum(n, na.rm = TRUE))
-d <- 
-  ca %>% 
-  right_join(hh %>% filter(haulval == "V", !is.na(nsarea)) %>% select(id)) %>% 
-  id_separate() %>% 
-  filter(latin == "Merlangius merlangus",
-         year == 2005,
-         quarter == 1)
-x2 <-
-  d %>% 
-  group_by(age) %>% 
-  summarise(n.tidy = sum(n))
-x1 %>% 
-  full_join(x2)
-```
-
-### Indices
+We use this probability to split each length class into ages. Here we simply have to join joining the length-frequency and the alk dataframes and split the count tally (n) in each length group into number of fish at each age (n.nage) by multiply the number measured by length with the probability:
 
 ```{r}
-# May need to get newer version of Indices.csv
-ind <- read_csv("data-raw/Indices.csv")
-colnames(ind) <- tolower(colnames(ind))
+d <- 
+  lfs %>% 
+  left_join(alk, by = "length") %>% 
+  mutate(n.age = p * n)
 ```
 
+If we check the 70 cm length class again we have:
+```{r}
+d %>% 
+  filter(length == 70) %>% 
+  knitr::kable()
+```
+
+Visually we have now the following:
+
+```{r}
+d %>% 
+  ggplot(aes(length, n.age, fill = factor(age))) +
+  theme_grey() +
+  geom_col() +
+  scale_fill_brewer(palette = "Set3") +
+  labs(x = "Length",
+       y = "n",
+       fill = "Age",
+       subtitle = "Length frequency by age")
+```
+
+We can now also look at the age distribution:
+```{r}
+d %>% 
+  group_by(age) %>% 
+  summarise(n.age = sum(n.age, na.rm = TRUE)) %>% 
+  drop_na() %>% 
+  ggplot(aes(age, n.age)) +
+  geom_col() +
+  scale_x_continuous(breaks = 0:10) +
+  labs(x = "Age",
+       y = "n")
+```
+
+### Age based indices

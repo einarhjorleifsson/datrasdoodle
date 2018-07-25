@@ -244,4 +244,153 @@ hh %>%
        subtitle = "Distribution of haulduration")
 ```
 
+## Gear metrics
+
+NOTE: Stuff at the moment just data explorations. It is of interest to look at patterns in gear metrics because they affect the constant catchability assumption through time in stock assessment models via the link equation:
+
+$$U_y = q B_y$$
+
+Besides the stuff above, there are some interesting variables in the haul dataframe that relate to gear metrics. Lets read in all the haul data available:
+
+```{r}
+hh <- read_rds("data/hh_datras.rds")
+```
+
+**Does a longer warp-length result in wider doorspread**
+
+Lets just look at the "GOV"-gear:
+```{r}
+d <-
+  hh %>% 
+  filter(gear == "GOV")
+p <- 
+  d %>% 
+  ggplot(aes(warplngt, doorspread)) +
+  geom_point(size = 0.5, alpha = 0.1) +
+  scale_x_continuous(breaks = c(seq(0, 500, by = 100), seq(1000, 5000, by = 500))) 
+p
+```
+
+The overall pattern indicates that as the warp-length is increased a certain plateau of the door-spread is reached. This is expected because the geometry of the net is going to limit the how much the doors can spread out. In general the maximum door-spread is around 100 meters but there is an separate cloud of points with a maximum around 125 meters. In addition at 100 meter warp-length there what looks like an anomalous distribution of door-spreads.
+
+Lets split the data by surveys:
+```{r}
+p +
+  facet_wrap(~ survey)
+```
+
+Again in some of the surveys a clear dichotomy or bimodality is observed in the relationship of warp-length and door-spread. And the anomaly at 100 meter warp-length seems to be associated with the NS-IBTS. Without knowing much more about the reporting of the survey data, lets for the time being just delete the 100 meter warp-length data from the NS-IBTS:
+
+```{r}
+d <- 
+  d %>% 
+  filter(!(warplngt == 100 & survey == "NS-IBTS"))
+```
+
+But what is the reason for the biomodality?
+
+Lets just look at the most recent years of data:
+```{r}
+d %>% 
+  filter(year >= 2010) %>% 
+  ggplot(aes(warplngt, doorspread, colour = country)) +
+  geom_point(size = 0.5, alpha = 0.1) +
+  scale_x_continuous(breaks = c(seq(0, 500, by = 250), seq(1000, 5000, by = 500))) +
+  facet_wrap(~ country)
+```
+
+```{r}
+d %>% 
+  filter(year >= 2010) %>% 
+  mutate(r = warplngt / doorspread) %>% 
+  filter(r < 20) %>% 
+  ggplot(aes(warplngt, r, colour = country)) +
+  geom_point(size = 0.5, alpha = 0.1) +
+  scale_x_continuous(breaks = c(seq(0, 500, by = 250), seq(1000, 5000, by = 500))) +
+  facet_wrap(~ country)
+```
+
+
+```{r}
+d <- 
+  d %>% 
+  mutate(r = warplngt/doorspread)
+d %>% 
+  drop_na(r) %>% 
+  filter(r < 20) %>% 
+  ggplot(aes(year, r, group = year)) +
+  geom_violin(scale = "width") +
+  facet_wrap(~ survey)
+d %>% 
+  filter(r < 20) %>% 
+  ggplot(aes(depth, r, colour = factor(quarter))) +
+  geom_point(size = 0.5) +
+  facet_wrap(~ quarter)
+```
+
+
+```{r}
+hh %>% 
+  filter(gear %in% c("BAK", "GOV", "PORB", "ROT", "TLV")) %>% 
+  select(survey, gear, doorspread, wingspread) %>% 
+  drop_na() %>% 
+  # get rid of implausibles
+  filter(wingspread <= 0.80 * doorspread) %>% 
+  ggplot(aes(doorspread, wingspread)) +
+  geom_point(size = .5, alpha = 0.1) +
+  geom_smooth(se = FALSE) +
+  scale_color_brewer(palette = "Set1") +
+  facet_wrap(~ gear)
+```
+
+```{r}
+gov <- 
+  hh %>% 
+  filter(gear %in% c("GOV"),
+         !is.na(wingspread),
+         !is.na(doorspread)) %>% 
+  # get rid of implausibles
+  filter(wingspread <= 0.80 * doorspread) %>% 
+  mutate(r = wingspread / doorspread)
+gov %>% 
+  filter(quarter %in% c(1,3),
+         year %in% 2005:2017) %>% 
+  ggplot(aes(factor(year), r)) +
+  geom_violin(scale = "width") +
+  geom_jitter(size = 1, alpha = 0.1) +
+  #scale_colour_brewer(palette = "Set1") +
+  labs(x = NULL,
+       y = "Ratio of wingspread over doorspread") +
+  facet_wrap(~ quarter)
+gov %>% 
+  ggplot(aes(depth, r)) +
+  geom_point(size = 1, alpha = 0.1) +
+  geom_smooth()
+
+```
+
+
+
+
+
+
+```{r}
+hh %>% 
+  filter(gear %in% c("BAK", "GOV", "PORB", "ROT", "TLV")) %>% 
+  # get rid of implausibles
+  filter(warplngt > doorspread) %>% 
+  ggplot(aes(wingspread, netopening, colour = gear)) +
+  geom_point()
+```
+
+```{r}
+hh %>% 
+  filter(gear %in% c("BAK", "GOV", "PORB", "ROT", "TLV")) %>% 
+  select(wingspread, netopening, gear) %>% 
+  drop_na() %>% 
+  filter(netopening < wingspread) %>% 
+  ggplot(aes(wingspread, netopening, colour = gear)) +
+  geom_point(size = 1, alpha = 0.2) +
+  geom_smooth(method = "lm")
+```
 
