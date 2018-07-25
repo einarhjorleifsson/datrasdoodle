@@ -1222,10 +1222,14 @@ alk <- alk[alk$speccode != -9,]
 alk <- alk[alk$lngtclass != -9,]
 alk <- alk[!is.na(alk$lngtcode),]
 alk$age <- as.numeric(as.character(alk$age))
+```
+
+```{r}
 # Select a species for a particular year and quarter and examine the age length key 
 # Chose a species, year and quarter to examine
 what.species    <- 'Gadus morhua' # These are examples.
 alk1 <- alk[alk$scientific.name == what.species,]
+
 #Extract the columns of interest
 alk2 <- data.frame(lngtclass=alk1$lngtclass,
                    age=alk1$age,
@@ -1234,16 +1238,16 @@ xtabs(~age+lngtclass,data=alk2)     # examine the data
 # install.packages('mlogit') # Install package if necessary
 library(mlogit)
 mldata <- mlogit.data(alk2,varying=NULL,choice='age',shape='wide')
-mlogit.model<- mlogit(age~1|lngtclass, data = mldata, reflevel="1")
+mlogit.model<- mlogit(age~1 | lngtclass, data = mldata, reflevel="1")
 summary(mlogit.model)
-#  Calculate the logit values
-newdata <- data.frame(lngtclass = 1:90)
 ```
 
-EINAR: TO DO - below is somewhat strange
-```{r, eval = FALSE}
+EINAR: TO DO - below is somewhat strange, one needs to get the proper parameter values:
+```{r}
+#  Calculate the logit values
+newdata <- data.frame(lngtclass = 1:90)
 logit0 <- 13.9517 +  -0.8576*newdata$lngtclass
-logit1 <- rep(0, 70)
+logit1 <- rep(0, length(newdata$lngtclass))
 logit2 <- -6.5674 +   0.1988*newdata$lngtclass
 logit3 <- -10.099 +   0.2625*newdata$lngtclass
 logit4 <- -15.8707 +  0.3558*newdata$lngtclass
@@ -1251,7 +1255,7 @@ logit5 <- -18.9503 +  0.3840*newdata$lngtclass
 logit6 <- -19.8364 +  0.3791*newdata$lngtclass
 logit7 <- -21.9500 +  0.3995*newdata$lngtclass
 # We can exponentiate these logit values and scale them, knowing that the probabilities of for all the ages must sum to one.
-logits <- cbind(logit0, logit1, logit2, logit3,logit4,logit5,logit6,logit7)
+logits <- cbind(logit0, logit1, logit2,logit3,logit4,logit5,logit6,logit7)
 p.unscaled <- exp(logits)
 p <- cbind(newdata, (p.unscaled / rowSums(p.unscaled)))
 colnames(p) <- c("lngtclass", "age0", "age1", "age2", "age3","age4","age5","age6","age7")
@@ -1262,8 +1266,44 @@ np <- p[,-1]
 par(mfrow=c(1,1),mar=c(5,5,3,3))
 barplot(t(np),space=0,col=1:dim(np)[[2]],ylab="P",xlab="Length(cms)",
         legend.text=dimnames(np)[[2]],args.legend=list(x='topleft',bg='wheat'))
+```
+
+**tidyverse**
+```{r}
+tidy_mlogit <- function(m, lengths = 1:200, ages = 0:10) {
+  
+  x <- coefficients(m)
+  
+  p <-
+    data_frame(variable = names(x),
+                  value = x) %>% 
+    separate(variable, c("age", "parameter"), sep = ":", convert = TRUE) %>% 
+    mutate(parameter = str_replace(parameter, "\\(", ""),
+           parameter = str_replace(parameter, "\\)", "")) %>% 
+    spread(parameter, value)
+  
+  d <- 
+    crossing(age = ages,
+             length = lengths) %>% 
+    left_join(p, by = "age") %>% 
+    mutate(intercept = replace_na(intercept, 0),
+           lngtclass = replace_na(lngtclass, 0),
+           p = exp(intercept + lngtclass * length)) %>% 
+    group_by(length) %>% 
+    mutate(p = p / sum(p)) %>% 
+    ungroup()
+  
+  return(d)
+
+}
+mlogit.model %>% 
+  tidy_mlogit() %>% 
+  ggplot(aes(length, p, group = age, colour = factor(age))) +
+  geom_line()
+```
 
 
+```{r}
 # This basic approach can be extended to incorporate other 'predictor' variables, e.g. sex.
 
 # As an exercise see if you can expand the model to do this and apply the predicted or modeled ALKs to the appropriate length-frequency data.
@@ -1290,7 +1330,7 @@ summary(mlogit.model)
 ### Practical 04 - Exploring trawl data with statistical models 
 
 The aim of this exercise is download ICES exchange format data from www.ices.dk create nos-at-age data and investigate the output by various types of interpolation and regression models.  We can then look at the implications of various assumptions.
-```{r, eval = FALSE}
+```{r}
 library(mgcv)
 library(akima)
 ```
@@ -1300,13 +1340,31 @@ library(akima)
 4. Install the R library datras. Do this by downloading datras*zip from the sharepoint. Open R, go to packages, install package from local zip files.
 5. Attach datras package and others to search path
 6. Extract the chrons, lf and alk data for the survey of your choice from the relevant directory #
+
 ```{r, eval = FALSE}
-alk <- parseExchangeFormatALKs(wd="/home/einarhj/r/Pakkar/datrasr")
-lfs <- parseExchangeFormatLFs(wd="/home/einarhj/r/Pakkar/datrasr")
-chrons <- parseExchangeFormatChrons(wd="/home/einarhj/r/Pakkar/datrasr")
+#alk <- parseExchangeFormatALKs(wd="data-raw/exchange")
+#lfs <- parseExchangeFormatLFs(wd="data-raw/exchange")
+#chrons <- parseExchangeFormatChrons(wd="data-raw/exchange")
 ```
-7. Tidy up the data. This time using the functions tidy** which simply makes things tidier.
+
 ```{r, eval = FALSE}
+# NOT RUN
+library(DATRAS)
+raw <- DATRAS::getDatrasExchange("NS-IBTS", 2009:2018, 1)
+raw %>% write_rds("data/exchange-data_NS-IBTS_2009-2018-quarter1.rds")
+```
+
+```{r}
+raw <- read_rds("data/exchange-data_NS-IBTS_2009-2018-quarter1.rds")
+chrons <- as.data.frame(raw[["HH"]]) %>% rename_all(tolower)
+lfs <- as.data.frame(raw[["HL"]]) %>% rename_all(tolower)
+alk <- as.data.frame(raw[["CA"]]) %>% rename_all(tolower)
+```
+
+
+
+7. Tidy up the data. This time using the functions tidy** which simply makes things tidier.
+```{r}
 alk    <- tidyALKdata(input=alk)
 lfs    <- tidyLfData(input=lfs)
 chrons <- tidyChronData(input=chrons)
@@ -1321,29 +1379,96 @@ ww <- grep('Culex', alk$scientific.name)      # There are mosquitoes in the NS I
 alk[ww,][1:5,]
 ```
 8. Merge the length-frequencies and chrons
-```{r, eval = FALSE}
+
+
+```{r}
+mergeChronsLfs <- function(chrons=chrons,length.frequencies=spurdog) {
+  
+  #Input are the raw chrons and the lfs by species
+  
+  short.chrons <- data.frame(quarter=chrons$quarter,country=chrons$country,ship=chrons$ship,
+                             gear=chrons$gear,stno=chrons$stno,haulno=chrons$haulno,year=chrons$year,
+                             shootlat=chrons$shootlat,
+                             shootlong=chrons$shootlong,
+                             haullat=chrons$haullat,
+                             haullong=chrons$haullong,
+                             daynight=chrons$daynight,
+                             statrec=chrons$statrec,
+                             depth=chrons$depth,
+                             haulval=chrons$haulval,
+                             distance=chrons$distance,
+                             hauldur=chrons$hauldur,
+                             netopening=chrons$netopening,
+                             wingspread=chrons$wingspread,
+                             speedwater=chrons$speedwater,
+                             groundspeed=chrons$groundspeed,
+                             doorspread=chrons$doorspread,
+                             windspeed = chrons$windspeed,
+                             surtemp=chrons$surtemp,
+                             bottemp=chrons$bottemp,
+                             #datim.shoot=chrons$datim.shot,datim.haul=chrons$datim.haul,
+                             stringsAsFactors = FALSE)
+  
+  
+  short.length.frequencies <- length.frequencies[,-1]
+  short.length.frequencies$country <- as.character(short.length.frequencies$country)
+  short.length.frequencies$ship <- as.character(short.length.frequencies$ship)
+  short.length.frequencies$gear <- as.character(short.length.frequencies$gear)
+  
+  # Einar: do not get this to work
+  #merged.lfs  <- base::merge(short.chrons,short.length.frequencies,
+  #                           by.x = c("quarter", "country", "ship", "gear", "stno", "haulno", "year"),
+  #                           by.y = c("quarter", "country", "ship", "gear", "stno", "haulno", "year"),
+  #                           all=T)
+  library(dplyr)
+  merged.lfs <- short.length.frequencies  %>%
+    full_join(short.chrons)
+  
+  
+  
+  merged.lfs$scientific.name <- short.length.frequencies$scientific.name[1]
+  merged.lfs$hlnoatlngt <- ifelse(is.na(merged.lfs$hlnoatlngt),0,merged.lfs$hlnoatlngt)
+  merged.lfs$hlwtatlngt <- ifelse(is.na(merged.lfs$hlwtatlngt),0,merged.lfs$hlwtatlngt)
+  
+  merged.lfs$statrec <- as.character(merged.lfs$statrec)
+  
+  #Note: In some cases there are missing haul longs and lats.
+  
+  merged.lfs
+  
+}
+```
+
+```{r}
 what.species <- 'Gadus morhua'  # chose a species
-merged.fish  <- mergeChronsLfs(chrons=chrons,length.frequencies=lfs[lfs$scientific.name==what.species,])
+merged.fish  <- 
+  mergeChronsLfs(chrons=chrons,length.frequencies=lfs[lfs$scientific.name==what.species,])
 ```
 9. Get the numbers at age at each station. Note all modeling work below will be based on these files.
-```{r, eval = FALSE}
-nage <- NosatAgebyYearLonLat(lfdat = merged.fish,alk = alk, chrons=chrons,  what.species = what.species)
+```{r}
+nage <- 
+  NosatAgebyYearLonLat(lfdat = merged.fish,alk = alk, chrons=chrons,  what.species = what.species)
 head(nage,15) # Examine first 10 lines
 ```
 10. Put on CPUEs at each station #
-```{r, eval = FALSE}
+```{r}
 nage$cpue.by.n   <- nage$hlnoatage/nage$haulduration
 nage$cpue.by.wt  <- nage$hlwtatage/nage$haulduration
 ```
 11. Simple linear interpolation can be handy.
-```{r, fig.width = 7.5, fig.height = 6, eval = FALSE}
+```{r, fig.width = 7.5, fig.height = 6}
 what.age  <- 4  # chose ages
 grid.size <- 40  # chose grid size (larger number = finer grid)
-nage.a <- nage[is.na(nage$age) | nage$age == what.age,]    # select age to plot. Remember this is all the data for all the years. 
-summary(nage.a$cpue.by.n) # check you have any +ve data. Sometimes you just have zeros which makes interpolation tricky!
+# select age to plot. Remember this is all the data for all the years. 
+nage.a <- nage[is.na(nage$age) | nage$age == what.age,]  
+# check you have any +ve data. 
+#    Sometimes you just have zeros which makes interpolation tricky!
+summary(nage.a$cpue.by.n) 
 nage.a <- nage.a[!is.na(nage.a$cpue.by.n),]
-inage <- interp(jitter(nage.a$shootlong),jitter(nage.a$shootlat),
-                xo=seq(min(nage.a$shootlong), max(nage.a$shootlong), length = grid.size),
+
+inage <- 
+  interp(jitter(nage.a$shootlong),jitter(nage.a$shootlat),
+         xo=seq(min(nage.a$shootlong), max(nage.a$shootlong), length = grid.size),
                 yo=seq(min(nage.a$shootlat), max(nage.a$shootlat), length = grid.size),nage.a$cpue.by.n) # do the interpolation
 par(mfrow=c(1,1))
 image.plot(inage$x,inage$y,log(inage$z+1),col=topo.colors(100),xlab='latititude',ylab='longitude') # plot the nos at age
@@ -1380,8 +1505,9 @@ m3 <- lm(cpue.by.n ~ year*age,data=mdat)  # plus the interaction between year an
 anova(m0,m1,m2,m3)         # which model would you chose ?
 summary(m3)                # what do you think of this model ?
 # Create a data set of years and ages over which to demonstrate the results
-newdata <- expand.grid(year = min(mdat$year,na.rm=T):max(mdat$year,na.rm=T),
-                       age  = as.factor(min(as.numeric(as.character(mdat$age)),na.rm=T ):
+newdata <- 
+  expand.grid(year = min(as.numeric(mdat$year),na.rm=T):max(as.numeric(mdat$year),na.rm=T),
+              age  = as.factor(min(as.numeric(as.character(mdat$age)),na.rm=T ):
                                           max(as.numeric(as.character(mdat$age)),na.rm=T )))
 # Have a look at the 'new data'
 head(newdata)
