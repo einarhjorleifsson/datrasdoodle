@@ -44,7 +44,8 @@ p1 <-
   geom_col() +
   labs(x = NULL,
        subtitle = "Length frequency")
-alk <-
+
+alk.empirical <-
   hh %>% 
   filter(year == 2014,
          quarter == 3) %>% 
@@ -60,7 +61,7 @@ alk <-
   select(-n) %>% 
   drop_na()
 p2 <-
-  alk %>% 
+  alk.empirical %>% 
   mutate(age = ifelse(age > 9, 9, age)) %>% 
   ggplot(aes(length, p, fill = factor(age))) +
   theme_grey() +
@@ -79,7 +80,7 @@ In principle we want to split the each length class of the length distribution (
 
 Lets look at the alk for the 70 cm length class:
 ```{r}
-alk %>% 
+alk.empirical %>% 
   filter(length == 70) %>% 
   knitr::kable()
 ```
@@ -91,11 +92,11 @@ We use this probability to split each length class into ages. Here we simply hav
 ```{r}
 d <- 
   lfs %>% 
-  left_join(alk, by = "length") %>% 
+  left_join(alk.empirical, by = "length") %>% 
   mutate(n.age = p * n)
 ```
 
-If we check the 70 cm length class again we have:
+If we check the 70 cm length class again we now have an estimate of the number of fish by each age-class:
 ```{r}
 d %>% 
   filter(length == 70) %>% 
@@ -196,6 +197,7 @@ alk.empirical <-
   mutate(length = floor(length),
          age = ifelse(age > 9, 9, age)) %>% 
   group_by(age, length) %>% 
+  # NOTE: THIS NOT WHAT IS DONE BELOW IN THE mlogit MODEL
   summarise(n = sum(n)) %>% 
   group_by(length) %>% 
   mutate(p = n / sum(n, na.rm = TRUE)) %>% 
@@ -217,24 +219,21 @@ alk.empirical %>%
 ....
 
 ```{r}
-#library(mlogit)
-mldata <- 
-  alk %>% 
-  rename(lngtclass = length) %>% 
-  select(-p) %>% 
-  mlogit::mlogit.data(varying=NULL,choice='age',shape='wide')
-m <- mlogit::mlogit(age~1 | lngtclass, data = mldata, reflevel="1")
+# library(mlogit)
+mldata <-
+  hh %>% 
+  filter(year == 2014,
+         quarter == 3) %>% 
+  select(id) %>% 
+  left_join(ca, by = "id") %>% 
+  filter(latin == Latin) %>% 
+  mutate(length = floor(length)) %>% 
+  select(lngtclass = length,
+         age) %>% 
+  mlogit::mlogit.data(varying = NULL, choice = 'age', shape = 'wide')
+m <- mlogit::mlogit(age~1 | lngtclass, data = mldata, reflevel = "1")
 
-m <-
-  mldata <- 
-  alk %>% 
-  rename(lngtclass = length) %>% 
-  select(-p) %>% 
-  mlogit::mlogit.data(varying=NULL,choice='age',shape='wide') %>% 
-  mlogit::mlogit(age~1 | lngtclass, data = ., reflevel="1")
-
-
-tidy_mlogit <- function(m, lengths = 1:130, ages = 0:20) {
+tidy_mlogit <- function(m, lengths = 1:200, ages = 0:10) {
   
   x <- coefficients(m)
   
@@ -262,8 +261,9 @@ tidy_mlogit <- function(m, lengths = 1:130, ages = 0:20) {
 }
 alk.model <- 
   m %>% 
-  tidy_mlogit(lengths = c(min(lfs$length):max(lfs$length)), 
-              ages =    c(min(alk$age):max(alk$age)))
+  tidy_mlogit(lengths = c(min(lfs$length):max(lfs$length)),
+              ages = c(0:10))
+              #ages =    c(min(alk.raw$age):max(alk.raw$age)))
 ```
 
 ```{r}
@@ -287,7 +287,8 @@ ggplot() +
   geom_point(data = alk.empirical,
             aes(length, p, colour = factor(age))) +
   geom_line(data = alk.model,
-            aes(length, p, colour = factor(age)))
+            aes(length, p, colour = factor(age))) +
+  scale_colour_brewer(palette = "Set3")
 ```
 
 ... hmmm, something rotten in the State of Denmark - code or model needs revisiting ...
