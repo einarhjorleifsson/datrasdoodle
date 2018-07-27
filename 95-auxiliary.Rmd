@@ -258,3 +258,23 @@ system("chmod a+rx /net/ftp/export/home/ftp/pub/reiknid/einar/datras_worms.csv")
     -  8	 Only volume (litre) registered
     -  9	 Valid information available but not recorded in the file
     - 10	 No category catch weight  only total numbers and length composition
+
+
+### Just a placholder for fixing bad geoms
+```{r, error = TRUE}
+library(mapdata)
+library(sf)
+library(lwgeom)
+mapBase <- map("worldHires", fill = T, plot = F)
+# now we need to coerce it to an "sf" object, and fix any
+mapBase <- st_as_sf(mapBase)
+# now let's try cropping it to a region of Europe
+cropMap <- st_crop(mapBase, xmin = -15, xmax = 30, ymin = 30, ymax = 60)
+# note we get an error message about Self-intersection...
+# we can fix this using the lwgeom library...
+mapBase <- st_make_valid(mapBase)
+cropMap <- st_crop(mapBase, xmin = -15, xmax = 30, ymin = 30, ymax = 60)
+
+ggplot(cropMap) + geom_sf()
+```
+

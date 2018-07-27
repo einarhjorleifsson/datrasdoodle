@@ -63,3 +63,4 @@ At present, the scribbles are a total mess, the space just some ad-hoc codes exp
 
 The aim is that the text as well as the R-code snippets should of course be human readable (a task that has been made more easy with the advent of the tidyverse sweep of packages) and fully reproducible (from a to z). Any additional functions beyond those currently available in the tidyverse dialect should be kept to an absolute minimum (tidy codes are all alike but every messy code is messy in its own way). But those added should be explained in detail.
 
+**Placeholder**: [Mastering Software Development in R](https://leanpub.com/msdr?utm_content=buffer75f6b&utm_medium=social&utm_source=twitter.com&utm_campaign=buffer)

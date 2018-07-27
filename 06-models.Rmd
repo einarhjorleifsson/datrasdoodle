@@ -4,6 +4,7 @@
 
 ```{r}
 library(tidyverse)
+library(broom)
 library(modelr)
 ca <- read_rds("data/ns-ibts_ca.rds")
 ```
@@ -151,12 +152,12 @@ grid <-
   data_grid(age, sex) %>% 
   mutate(pY = predict(model, newdata = ., type = 'response'))
 # or
-library(broom)
-res <-
-  d %>% 
-  data_grid(age, sex) %>% 
-  augment(x = model, newdata = ., type.predict = "response") %>% 
-  as_tibble()
+#library(broom)
+#res <-
+#  d %>% 
+#  data_grid(age, sex) %>% 
+#  augment(x = model, newdata = ., type.predict = "response") %>% 
+#  as_tibble()
 
 grid %>% 
   ggplot(aes(age, pY, colour = sex)) +

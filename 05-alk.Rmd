@@ -13,6 +13,9 @@ hl <- read_rds("data/ns-ibts_hl.rds")
 ca <- read_rds("data/ns-ibts_ca.rds")
 ```
 
+NOTE: Need to check interpretation of the n-variable (original name CANoAtLngt) in ca-data. The [DATRAS pages](https://datras.ices.dk/Data_products/FieldDescription.aspx?Fields=CANoAtLngt&SurveyID=2341) refer to this variable as meaning: "Amount of fish at the given category (per haul, species, length class, sex, maturity, age)."
+
+
 ## Converting length to age
 
 ### The principle - empirical approach
@@ -119,10 +122,12 @@ d %>%
 
 We can now also look at the age distribution:
 ```{r}
-d %>% 
+indices.alk.empirical <- 
+  d %>% 
   group_by(age) %>% 
   summarise(n.age = sum(n.age, na.rm = TRUE)) %>% 
-  drop_na() %>% 
+  drop_na()
+indices.alk.empirical %>% 
   ggplot(aes(age, n.age)) +
   geom_col() +
   scale_x_continuous(breaks = 0:10) +
@@ -132,11 +137,15 @@ d %>%
 
 ### Statistical modelling
 
+```
+NOTE: Some of the stuff here should be moved into the subection above.
+```
+
 In the above empirical approach there is a bit of a problem  - missingness :-)  The reader may have noticed the warning message given when plotting the "Length frequency by age":
 ```
 ## Warning: Removed 1 rows containing missing values (position_stack).
 ```
-This message was given because varible n.age has on record with NA. It so happens that it is the first record so we can see it by:
+This message was given because varible n.age has one record with NA. It so happens that it is the first record so we can see it by:
 ```{r}
 glimpse(d)
 ```
@@ -197,7 +206,7 @@ alk.empirical <-
   mutate(length = floor(length),
          age = ifelse(age > 9, 9, age)) %>% 
   group_by(age, length) %>% 
-  # NOTE: THIS NOT WHAT IS DONE BELOW IN THE mlogit MODEL
+  # NOTE: : Need to check interpetation of the n-variable in ca-data
   summarise(n = sum(n)) %>% 
   group_by(length) %>% 
   mutate(p = n / sum(n, na.rm = TRUE)) %>% 
@@ -218,9 +227,11 @@ alk.empirical %>%
 
 ....
 
+Reference to @henningsen2011maxlik
+
 ```{r}
 # library(mlogit)
-mldata <-
+alk.mldata <-
   hh %>% 
   filter(year == 2014,
          quarter == 3) %>% 
@@ -229,9 +240,12 @@ mldata <-
   filter(latin == Latin) %>% 
   mutate(length = floor(length)) %>% 
   select(lngtclass = length,
-         age) %>% 
+         age,
+         n) %>% 
+  # NOTE: Need to check interpetation of the n-variable in ca-data
+  uncount(n) %>% 
   mlogit::mlogit.data(varying = NULL, choice = 'age', shape = 'wide')
-m <- mlogit::mlogit(age~1 | lngtclass, data = mldata, reflevel = "1")
+m <- mlogit::mlogit(age~1 | lngtclass, data = alk.mldata, reflevel = "1")
 
 tidy_mlogit <- function(m, lengths = 1:200, ages = 0:10) {
   
@@ -252,9 +266,12 @@ tidy_mlogit <- function(m, lengths = 1:200, ages = 0:10) {
     mutate(intercept = replace_na(intercept, 0),
            lngtclass = replace_na(lngtclass, 0),
            p = exp(intercept + lngtclass * length)) %>% 
+    # Probabilities of all ages within a length class
+    #   must sum to one
     group_by(length) %>% 
     mutate(p = p / sum(p)) %>% 
-    ungroup()
+    ungroup() %>% 
+    select(age, length, p)
   
   return(d)
 
@@ -280,22 +297,78 @@ alk.model %>%
   scale_colour_brewer(palette = "Set3")
 ```
 
-Let's make a comparision between this model and the empirical observations:
+Let's make a comparison between this model and the empirical observations:
 
 ```{r}
 ggplot() +
   geom_point(data = alk.empirical,
             aes(length, p, colour = factor(age))) +
+  geom_line(data = alk.empirical,
+            aes(length, p, colour = factor(age)),
+            lwd = 0.3, linetype = 5) +
   geom_line(data = alk.model,
             aes(length, p, colour = factor(age))) +
-  scale_colour_brewer(palette = "Set3")
+  scale_colour_brewer(palette = "Set3") +
+  labs(x = "Length [cm]",
+       y = "Probability",
+       colour = "Age",
+       title = "Probability of age by length",
+       subtitle = "Empirical (points and dashed line) and mlogit fit (line)")
 ```
 
-... hmmm, something rotten in the State of Denmark - code or model needs revisiting ...
+We can now use the modelled alk's to the length frequency distribution:
 
-... once solved, next step. assign the alk.model to the length distribution ...
+```{r}
+indices.alk.model <- 
+  lfs %>% 
+  left_join(alk.model, by = "length") %>% 
+  mutate(n.age = p * n) %>% 
+  group_by(age) %>% 
+  summarise(n.age = sum(n.age))
+```
+
+```{r}
+indices.alk.model %>% 
+  ggplot(aes(age, n.age)) +
+  geom_col() +
+  scale_x_continuous(breaks = 0:10) +
+  labs(x = "Age",
+       y = "n")
+```
+
+Whats the difference between using an empirical vs a modeled alk?:
+
+```{r}
+d <- 
+  indices.alk.empirical %>% 
+  mutate(alk = "empirical") %>% 
+  bind_rows(indices.alk.model %>% 
+              mutate(alk = "model"))
+p <-
+  d %>% 
+  ggplot(aes(age, n.age, fill = alk)) +
+  geom_col(position = "dodge") +
+  scale_fill_brewer(palette = "Set1") +
+  scale_x_continuous(breaks = 0:10) +
+  labs(x = "Age",
+       y = "n") +
+  theme(legend.position = c(0.8, 0.65))
+p
+```
+
+On an ordinary scale the difference in not visible, however on a log-scale we have:
+```{r}
+p +
+  scale_y_log10()
+```
+
+Here there is a slight difference in the oldest age groups where we have relatively few data. In some cases this may matter because the total mortality signal (the slope) is based on log of the index.
 
 #### Some other statistical model
+
+... check @berg2012spatial
+
+
 
 ### The engineer's approach
 
