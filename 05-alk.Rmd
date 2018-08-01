@@ -2,7 +2,8 @@
 
 ```{r, warning = FALSE, message = FALSE}
 library(tidyverse)
-library(lubridate)
+# source in conventient functions
+source("R/00_main.R")
 library(patchwork)
 theme_set(theme_grey())
 ```
@@ -18,40 +19,77 @@ NOTE: Need to check interpretation of the n-variable (original name CANoAtLngt) 
 
 ## Converting length to age
 
-### The principle - empirical approach
+Length data from a catch are relatively cheap to record in situ. For age data one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work first. Hence in surveys the length measurements are more numerous, the objective being to estimate with good precision the length distribution of the catch at each station.
 
-Length data are relatively cheap to record relative to age data, because for the latter one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work in addition to counting rings. Hence in surveys the length measurements are more numerous, the objective being to estimate with good precision the length distribution of the catch at each station while otoliths are only collected from a smaller subsample of the catch.
+### Introduction to the age data 
 
-The sub-samples of the age data is then used to calculate the probability of age for a given length class, generally called an age-length key (alk). This data is then used to split the length data into age classes.
+The primary objective of collecting data for age determination is to calculate the probability of age for a given length class, generally referred to as an age-length key (alk). Since the otoliths are collected from a smaller subsample of the catch than the length data at each station the former is not sufficient to determine the age distribution within a haul with sufficient precision.
 
-Lets summarize some length frequency and age-length data for one species in one survey:
+In fact the *a priori* sampling strategy for age determination is frequently base on some substrata (such as the nine North Sea roundfish areas) rather than on a single haul. Within each strata the objective is to sample some minimum number within each predetermined length bins (1 cm, 5 cm , ...). This strategy differs from the length sampling which is either a full census from the catch or if sub-sampling is warranted supposed to be a random sample from the catch.
+
+Let's first look at the structure of the age dataframe:
 
 ```{r}
-Latin <- "Gadus morhua"
-lfs <-
+glimpse(ca)
+```
+
+The observations (rows) are the number of fish observed for a species, sex and maturity and age within a station. Ergo, within a haul for a particular species we could have more than one observations within a length group, this being because we may have different sex and maturities within the length group.
+
+Those details aside, lets get an appreciation of the difference in the length distribution from the length dataframe and the age data frame:
+
+```{r}
+Year <- 2018
+Quarter <- 1
+Latin <- "Pleuronectes platessa"
+NSarea <- c(1, 2, 3)
+hh2 <-
   hh %>% 
-  filter(year == 2014,
-         quarter == 3) %>% 
-  select(id) %>% 
-  left_join(hl, by = "id") %>% 
-  filter(latin == Latin) %>% 
+  filter(year == Year,
+         quarter == Quarter,
+         nsarea %in% NSarea)
+lfs <-
+  hh2 %>% 
+  left_join(hl %>% 
+              filter(latin == Latin)) %>% 
   mutate(length = floor(length)) %>% 
   group_by(length) %>% 
-  summarise(n = sum(n, na.rm = TRUE)) %>% 
-  drop_na()
-
-p1 <-
-  lfs %>% 
+  summarise(n = sum(n)) %>% 
+  mutate(source = "Length samples")
+alk <- 
+  hh2 %>% 
+  left_join(ca %>% 
+              filter(latin == Latin)) %>% 
+  mutate(length = floor(length)) %>% 
+  group_by(length) %>% 
+  summarise(n = sum(n)) %>% 
+  mutate(source = "Age samples")
+bind_rows(lfs, alk) %>% 
   ggplot(aes(length, n)) +
-  theme_grey() +
   geom_col() +
-  labs(x = NULL,
-       subtitle = "Length frequency")
+  facet_grid(source ~ ., scale = "free_y") +
+  labs(x = "Length",
+       y = "Number of fish",
+       title = "Length distributions from the age and the length sampling",
+       subtitle = paste(Year, Quarter, NSarea, Latin))
+```
+
+Besides the obvious difference in the total amount of fish measured, we observed that the general shape of the length frequency distributions is totally different from the "two datasources". Here the data collected for age have more or less a uniform distribution while a clear modality is observed in the length frequency data. This is because in the former case, length bins that are less frequent in the catch are, by design, sampled with a higher frequency for age determination than the most dominant length classes. One kind of wants to fill up each length class with some minimum number of fish, but no more than that.
+
+Again, this is because the objective of the age sampling is not to generate a representative distribution of age in the survey samples. But to generate an age-length-key which is then used to split the length frequency distribution into age distribution.
+
+Lets generate a code for an age-length-key for a particular species and survey from the age data, ignoring sex and maturity:
+
+```{r}
+Year <- 2014
+Quarter <- 3
+Latin <- "Gadus morhua"
+hh2 <-
+  hh %>% 
+  filter(year == Year,
+         quarter == Quarter)
 
 alk.empirical <-
-  hh %>% 
-  filter(year == 2014,
-         quarter == 3) %>% 
+  hh2 %>% 
   select(id) %>% 
   left_join(ca, by = "id") %>% 
   filter(latin == Latin) %>% 
@@ -63,6 +101,50 @@ alk.empirical <-
   mutate(p = n / sum(n, na.rm = TRUE)) %>% 
   select(-n) %>% 
   drop_na()
+
+alk.empirical %>% 
+  ggplot(aes(length, p, colour = factor(age))) +
+  geom_point() +
+  geom_line(lwd = 0.3, linetype = 5) +
+  scale_color_brewer(palette = "Set3") +
+  labs(x = "Length",
+       y = "Probability",
+       colour = "Age",
+       title = "Probability of age at length")
+```
+
+What we have is that for each length class we have observations (points) for the probility within each length class for a particular age class. The sum within a length group is by definition always **one**. Lets take the 70 cm length class as an example:
+
+
+```{r}
+alk.empirical %>% 
+  filter(length == 70) %>% 
+  knitr::kable()
+```
+
+Here we have 5 age-classes within the length class, the most numerous ones being age 3 (50%), then 4 (22%) and 5 (17%), while around 6% of the fish are of age 2 and 6.
+
+### The principle - empirical approach
+
+Lets visualize jointly the  length frequency and age-length data for one species in one survey:
+
+```{r}
+by.haul <-
+  cpue_per_length_per_haul(hh2, hl, Latin)
+lfs <-
+  by.haul %>% 
+  group_by(length) %>% 
+  summarise(n = sum(n)) %>% 
+  ungroup() %>% 
+  # here only take positives
+  filter(n > 0)
+p1 <-
+  lfs %>% 
+  ggplot(aes(length, n)) +
+  theme_grey() +
+  geom_col() +
+  labs(x = NULL,
+       subtitle = "Length frequency")
 p2 <-
   alk.empirical %>% 
   mutate(age = ifelse(age > 9, 9, age)) %>% 
@@ -78,19 +160,22 @@ p2 <-
 p1 + p2 + plot_layout(ncol = 1)
 ```
 
-
 In principle we want to split the each length class of the length distribution (top graph) into separate age groups based on the age-length key (lower graph). Visually this may be easy for the first mode, almost all fish in each length class belonging to age group 0. Beyond that, each length class is most often composed of more than one age groups. 
 
-Lets look at the alk for the 70 cm length class:
+Lets look at the count tally in the 70 cm length class:
+
+```{r}
+lfs %>% filter(length == 70) %>% knitr::kable()
+```
+
+Here we have 36.5 fish counted. In the age-length key for the same length class (as already shown above) we have:
 ```{r}
 alk.empirical %>% 
   filter(length == 70) %>% 
   knitr::kable()
 ```
 
-Here we have 5 age-classes in the length class, the most numerous ones being age 3 (50%), then 4 (22%) and 5 (17%), while around 6% of the fish are of age 2 and 6.
-
-We use this probability to split each length class into ages. Here we simply have to join joining the length-frequency and the alk dataframes and split the count tally (n) in each length group into number of fish at each age (n.nage) by multiply the number measured by length with the probability:
+We use the probability to split the length frequency within each length class into ages. Here we simply have to join joining the length-frequency and the alk dataframes and split the count tally (n) in each length group into number of fish at each age (n.nage) by multiply the number measured by length with the probability:
 
 ```{r}
 d <- 
@@ -106,10 +191,11 @@ d %>%
   knitr::kable()
 ```
 
-Visually we have now the following:
+Ergo the tally of a total of 36.5 fish in the 70 cm length category have been split up into the 5 age classes (the variable "n" should actually be dropped, just to avoid confusion). Taking all the data we visually have the following:
 
 ```{r}
 d %>% 
+  select(-n) %>% 
   ggplot(aes(length, n.age, fill = factor(age))) +
   theme_grey() +
   geom_col() +
@@ -120,8 +206,32 @@ d %>%
        subtitle = "Length frequency by age")
 ```
 
-We can now also look at the age distribution:
+Rather than first grouping all the length measurements from a survey and then apply the alk-key as done above, one could use the latter to split the length distribution in each haul into age:
 ```{r}
+by.haul.age <-
+  by.haul %>% 
+  left_join(alk.empirical) %>% 
+  group_by(id, age) %>% 
+  summarise(n = sum(p * n)) %>% 
+  left_join(hh %>% 
+              filter(year == 2014,
+                     quarter == 3) %>% 
+              select(id, shootlong, shootlat))
+```
+
+A visual representation of abundance distribution by age:
+```{r}
+by.haul.age %>% 
+  filter(age %in% 0:3) %>% 
+  ggplot(aes(shootlong, shootlat, size = n)) +
+  geom_point(colour = "red", alpha = 0.2) +
+  scale_size_area(max_size = 10) +
+  coord_quickmap() +
+  facet_wrap(~ age)
+```
+
+```{r}
+#We can now also look at the overall age distribution:
 indices.alk.empirical <- 
   d %>% 
   group_by(age) %>% 
@@ -135,11 +245,8 @@ indices.alk.empirical %>%
        y = "n")
 ```
 
-### Statistical modelling
 
-```
-NOTE: Some of the stuff here should be moved into the subection above.
-```
+### Statistical modelling
 
 In the above empirical approach there is a bit of a problem  - missingness :-)  The reader may have noticed the warning message given when plotting the "Length frequency by age":
 ```
@@ -152,76 +259,7 @@ glimpse(d)
 
 This means that length class 5 cm was recorded in the length measurements (hl), but no fish of that length class was aged (ca) in the year (2014) and quarter (3) for the species (Gadus morhua) in question. Since in this particular case it was the smallest length class one could obviously assign it "manually" to the youngest age group (age 0) in the dataset. But "missingness" of age samples in other length classes are bound to occur, particularly if we start to use some kind of spatial stratification of the age-length-key. So we need some generic approach. In this subsection we will take take some statistical approach.
 
-**JUST A PLACEHOLDER FOR NOW**
-```{r}
-# NOTE: Function will be put into a packages in the end
-cpue_per_length_per_haul <- function(hh, hl, Latin) {
-  
-  by.haul.positive <- 
-    hl %>% 
-    filter(latin == Latin) %>% 
-    mutate(length = floor(length)) %>% 
-    # Note: we are collapsing sex and maturity
-    group_by(id, latin, length) %>% 
-    summarise(n = sum(n)) %>% 
-    drop_na()
-  
-  all <- 
-    hh %>% 
-    filter(haulval == "V") %>% 
-    # Lets only carry forward variables "needed"
-    select(id, year, quarter) %>% 
-    crossing(length = sort(unique(by.haul.positive$length)),
-             latin = unique(by.haul.positive$latin))
-  
-  by.haul <- 
-    all %>% 
-    left_join(by.haul.positive) %>% 
-    mutate(n = replace_na(n, 0))
-  
-  return(by.haul)
-  
-}
-```
 
-```{r}
-Latin <- "Gadus morhua"
-lfs <-
-  cpue_per_length_per_haul(hh, hl, Latin)
-
-lfs <-
-  lfs %>% 
-  filter(year == 2014,
-         quarter == 3) %>% 
-  group_by(length) %>% 
-  summarise(n = sum(n, na.rm = TRUE))
-
-alk.empirical <-
-  hh %>% 
-  filter(year == 2014,
-         quarter == 3) %>% 
-  select(id) %>% 
-  left_join(ca, by = "id") %>% 
-  filter(latin == Latin) %>% 
-  mutate(length = floor(length),
-         age = ifelse(age > 9, 9, age)) %>% 
-  group_by(age, length) %>% 
-  # NOTE: : Need to check interpetation of the n-variable in ca-data
-  summarise(n = sum(n)) %>% 
-  group_by(length) %>% 
-  mutate(p = n / sum(n, na.rm = TRUE)) %>% 
-  select(-n) %>% 
-  drop_na()
-```
-
-Lets make a visual peek:
-```{r}
-alk.empirical %>% 
-  ggplot(aes(length, p, colour = factor(age))) +
-  geom_point() +
-  geom_line(lwd = 0.3, linetype = 5) +
-  scale_color_brewer(palette = "Set3")
-```
 
 #### The mlogit model
 
@@ -316,7 +354,7 @@ ggplot() +
        subtitle = "Empirical (points and dashed line) and mlogit fit (line)")
 ```
 
-We can now use the modelled alk's to the length frequency distribution:
+We can now use the modeled alk's to the length frequency distribution:
 
 ```{r}
 indices.alk.model <- 

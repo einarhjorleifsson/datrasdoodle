@@ -468,9 +468,9 @@ by.haul %>%
 
 ### A little convenient function
 
-In the above we got a little appreciation for not forgetting to take into account "missingness" in the DATRAS dataframes. It basically mean a little bit of extra coding where we both have to take the haul data and the length data into consideration. Since we may be doing this quite frequently a little convenient function, that uses the above codes as templates may be in order.
+In the above we got a little appreciation for not forgetting to take into account "missingness" in the DATRAS dataframes. It basically mean a little bit of extra coding where we both have to take the haul data and the length data into consideration. Since we may be doing this quite frequently a little convenient function, that encapsulates the above code may be in order:
 
-```{r}
+```{r, eval = FALSE}
 cpue_per_length_per_haul <- function(hh, hl, Latin) {
   
   by.haul.positive <- 
@@ -498,6 +498,11 @@ cpue_per_length_per_haul <- function(hh, hl, Latin) {
   return(by.haul)
   
 }
+```
+
+This code is available in the R/00_main.R script and we can source it (and other functions that may reside in the file) by:
+```{r}
+source("R/00_main.R")
 ```
 
 For any species we can now just do:
