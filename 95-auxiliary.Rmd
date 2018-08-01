@@ -1,8 +1,6 @@
 # Auxiliary {#aux}
 
-
-
-```{r}
+```{r, message = FALSE}
 library(tidyverse)
 library(gisland)
 ```
@@ -77,6 +75,7 @@ hl <-
   data_frame(id = c(1, 1, 1, 3, 3, 3, 3),
              length = runif(7, 20, 50) %>% round(),
              n = runif(7, 1, 4) %>% round())
+hl
 ```
 
 Now lets say we are only interested in calculating the abundance at each station. We would start by some code like the following:
@@ -89,7 +88,7 @@ d <-
 d
 ```
 
-Now if we were to calculate the mean abundance over all hauls on can not just do:
+Now if we were to calculate the mean abundance over all hauls on can **not** do:
 ```{r}
 d %>% summarise(m = mean(n))
 ```
@@ -125,6 +124,14 @@ hh %>%
   summarise(n = sum(n)) %>% 
   summarise(m = mean(n))
 ```
+
+Another approach to obtain the mean could be to sum the counts in the length data and divide it by the number of hauls obtained from the haul data:
+```{r}
+hl %>% summarise(n = sum(n)) / nrow(hh)
+```
+
+This would work for the mean. However if one were interested in other type of statistics, like e.g. the variance, this approach would create us some headache to code.
+
 
 ## On missingness {#onmissingness}
 
@@ -192,7 +199,7 @@ In the DATRAS data the species are encoded. There are three columns associated w
     - W: WoRMS ApiaID code
 * **valid_aphia**: An integer code for the species
 
-It is not clear at the time of this writing what processes are when Latin names ara assigned to the above species code sweeps of variables. The approach taken here is to use the [World Registry of Marine Species](http://www.marinespecies.org) often written as acronym WoRMS. Fortunately an R-library [worrms](https://github.com/ropensci/worrms) allows us to obtain the Latin names programatically.
+It is not clear at the time of this writing what processes are when Latin names are assigned to the above species code sweeps of variables. The approach taken here is to use the [World Registry of Marine Species](http://www.marinespecies.org) often written as acronym WoRMS. Fortunately an R-library [worrms](https://github.com/ropensci/worrms) allows us to obtain the Latin names programatically.
 
 Here the variable valid_aphia is the primary source, but in cases that is not specified (is NA) the speccode is used if the speccodetype is "W". We refer to this variable as aphia. Each numerical aphia value should have a unique Latin name. For convenience a complete lookup-table is generated based on the all the DATRAS data (as available in July 2018). The following code was used:
 

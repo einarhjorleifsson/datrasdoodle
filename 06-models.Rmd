@@ -2,7 +2,7 @@
 
 ... here some discussion on the tidyverse approach to model fitting ...
 
-```{r}
+```{r, message = FALSE}
 library(tidyverse)
 library(broom)
 library(modelr)

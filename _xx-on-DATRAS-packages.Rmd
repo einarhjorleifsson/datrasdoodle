@@ -1,0 +1,250 @@
+# On DATRAS package {#DATRAS-package}
+
+```{r}
+library(tidyverse)
+library(DATRAS)
+```
+
+Lets read in some DATRAS data available in the package
+```{r, message = FALSE}
+raw <- 
+  readExchange(system.file("exchange","Exchange1.zip",package="DATRAS"),
+               verbose = FALSE)
+d <- 
+  raw %>% 
+  subset(Species == "Microstomus kitt",
+         haul.id %in% c("2009:1:DEN:DAN2:GOV:69:12",
+                        "2009:1:DEN:DAN2:GOV:202:35"))
+hh <- d[["HH"]] %>% as_tibble()
+hl <- d[["HL"]] %>% as_tibble()
+ca <- d[["CA"]] %>% as_tibble()
+```
+
+### addSpectrum
+
+The `addSpectrum` is one of the key function in DATRAS, sort of what a lot of follow up analysis depend on. The input has to be of class "DATRASraw" returning the same class. The addSpectrum does **two** things:
+
+* Variable "sizeGroup" is added to the length frequency data (HL). This is an object of class factor that takes the range of the variable LngtCm and "bins" it according to the the value of the argument "by".
+* An object "N" is added to the haul data (HH). This is an object of class **table** with the number of fish counted in each haul (row) and each length bin (column) as specified above.
+
+Here is a glimpse:
+```{r}
+d <- addSpectrum(d)
+N <- d[["HH"]]$N
+class(N)
+N
+```
+
+In the tidyverse we would have in the haul-dataframe an object of class **list** rather than **table** containing the length frequency counts. An implementation emulating the addSpectrum could be:
+
+```{r}
+grp <- 1
+cm.breaks <- seq(min(hl$LngtCm, na.rm = TRUE),
+                 max(hl$LngtCm, na.rm=TRUE) + grp,
+                 grp)
+hl2 <-
+  hl %>%
+  select(haul.id, Count, LngtCm) %>%
+  mutate(sizeGroup = cut(LngtCm, breaks = cm.breaks, right = FALSE)) 
+hh2 <-
+  hl2 %>% 
+  group_by(haul.id, sizeGroup) %>%
+  summarise(Count = sum(Count)) %>%
+  complete(sizeGroup, fill = list(Count = 0)) %>%
+  ungroup() %>% 
+  right_join(hh %>% select(haul.id)) %>% 
+  group_by(haul.id) %>% 
+  nest()
+glimpse(hh2)
+hh2$data
+```
+
+### addNage
+
+As stated in the help file the addNage "... is just a short-cut for calling 'fitALK' to fit the model followed by 'predict.ALKmodel' and adding numbers-at-age per haul to the DATRASraw object in a variable called 'Nage'."
+The object Nage is of class matrix:
+```{r}
+d <- addNage(d, 1:4)
+hh <- d[["HH"]]
+class(hh$Nage)
+hh %>% select(haul.id, Nage)
+```
+
+Again in the tidyverse we would have used a list, if we were to emulate this type of storing. But before emulating that lets look at this ALK stuff.
+
+Start from scratch:
+```{r}
+d <- 
+  raw %>% 
+  subset(Species == "Microstomus kitt",
+         haul.id %in% c("2009:1:DEN:DAN2:GOV:69:12",
+                        "2009:1:DEN:DAN2:GOV:202:35")) %>% 
+  addSpectrum(by = 1)
+```
+
+Lets fit an ALK to the data:
+```{r}
+fit <-
+  d %>%
+  fitALK(minAge = 1,
+         maxAge = 4,
+         model = "cra~LngtCm",
+         gamma = NA,
+         autoChooseK = FALSE,
+         useBIC = FALSE,
+         varCof = FALSE,
+         maxK = 49)
+class(fit)
+pre <- 
+  fit %>% 
+  # uses predict.ALKmodel
+  predict()
+class(pre)
+pre
+```
+
+So we get a matrix of dimension number of hauls x number of age groups where the value is the number at each age group.
+
+Notes the data are contained in the attributes of the fit-object:
+```{r}
+attributes(fit)$data[["HH"]] %>% glimpse()
+```
+
+Note: To get the parameters from the fit-object, could do:
+```{r}
+ages <- attributes(fit)$ages
+x <- purrr::map(fit, "coefficients")
+n <- length(ages)
+names(x) <- ages
+cn <- names(x[[1]]) %>% str_extract('[A-Za-z]+') #only letters
+param <-
+  x %>% 
+  purrr::map(as_tibble) %>% 
+  bind_rows(.id = "age") %>% 
+  mutate(parameter = rep(cn, n)) %>% 
+  spread(parameter, value)
+param
+```
+
+Deep down in the cascading set of functions in DATRAS the core stuff happens within the NageByHaul-function. The steps within the function are:
+
+* Generate a dataframe of the full spectrum of length classes (and lons and lat in case it is an input variable in the model)
+* Calculates the probability of age for each length
+
+```{r}
+x <- fit
+#NageByHaul <-
+#function(row,x,returnALK=FALSE){
+
+dat = attr(x, "data") # DATRASraw
+
+# EINAR: only ONE haul at a time
+dat <-
+  dat %>% 
+  subset(haul.id == "2009:1:DEN:DAN2:GOV:69:12")
+
+models = x
+extraVars= unlist(lapply(lapply(attr(models,"ALKformula"),as.formula),xtraVars,x=dat))
+if(length(extraVars)==0) extraVars=NULL;
+
+maxAge = length(models)+1;
+
+len=attr(dat,"cm.breaks")[1:ncol(dat$N)]
+
+N=length(len)
+cc = 1:N
+
+nd = data.frame(LngtCm=len,
+                lat=dat[[2]]$lat,
+                lon=dat[[2]]$lon)
+
+# add extra variables is used:
+#nd[,extraVars]=dat[[2]][row,extraVars]
+
+# Seed a probability matrix
+p = matrix(1,nrow=N,ncol=maxAge);
+
+W = getOption("warn") 
+options(warn=-1);  ## disable warnings temporarily
+for(i in 1:(maxAge-1)){
+  p[,i] = 1 - predict(models[[i]], newdata=nd, type="response", newdata.guaranteed=TRUE);
+}
+options(warn=W) ## restore warnings
+
+
+# sidestep ---------------------------------------------------------------------
+p2 <- p
+colnames(p2) <- c(attributes(x)$ages, maxAge)
+p2 %>% 
+  as_tibble() %>% 
+  mutate(length = len) %>% 
+  gather(age, p, -length, convert = FALSE) %>% 
+  ggplot(aes(length, p, colour = age)) +
+  geom_line() +
+  geom_point()
+# end of sidestep --------------------------------------------------------------
+
+predProps=p
+punc <- function(k,a) {
+  p[k,a]*prod(1-p[k,1:(a-1)])
+}
+for(a in 2:maxAge) {
+  ## unconditional prob of age_i = Pi_i * Prod(1-Pi_j , j=1..i-1) for i>1. [Rindorf,Lewy p.2]
+  predProps[,a] = sapply(cc, punc, a = a)
+}
+
+# sidestep ---------------------------------------------------------------------
+p2 <- predProps
+colnames(p2) <- c(attributes(x)$ages, maxAge)
+p2 %>% 
+  as_tibble() %>% 
+  mutate(length = len) %>% 
+  gather(age, p, -length, convert = FALSE) %>% 
+  ggplot(aes(length, p, colour = age)) +
+  geom_line() +
+  geom_point()
+# end of sidestep --------------------------------------------------------------
+
+
+#if(!returnALK) { 
+#  return(dat[[2]]$N[row,]%*%predProps)
+#} else { 
+#    return( predProps)
+#}
+
+#}
+```
+
+Lets try the tidyverse flow:
+
+1. The alk-fitting:
+```{r}
+d <- 
+  raw %>% 
+  subset(Species == "Microstomus kitt",
+         haul.id %in% c("2009:1:DEN:DAN2:GOV:69:12",
+                        "2009:1:DEN:DAN2:GOV:202:35")) %>% 
+  addSpectrum(by = 1)
+ca <- d[["CA"]]
+model <- "cra~LngtCm" %>% as.formula()
+a <- 3
+myd <- 
+  ca %>% 
+  select(haul.id, Age, LngtCm, NoAtALK) %>% 
+  filter(Age >= a) %>% 
+  mutate(cra = as.factor(Age))
+fit <-
+  gam(cra ~ LngtCm,
+    data = myd,
+    family = "binomial",
+    weights = NoAtALK,
+    gamma = NA)
+class(fit)
+coefficients(fit)
+
+
+# the predictions
+nd <- data_frame(LngtCm = 1:100)
+predict(fit, newdata = nd, type = "response", newdata.guaranteed = TRUE)
+```
+

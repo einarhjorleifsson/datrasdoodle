@@ -20,7 +20,7 @@ hl <- read_rds("data/ns-ibts_hl.rds")
 ## Catch per haul
 ___
 
-### Abundance
+### Abundance (counts)
 
 Since in the tidying process all length data counts were standardized to 60 minutes haul time it is relatively straight forward to calculate the standardized abundance per 60 minute haul. Lets do this for some species of choice:
 
@@ -38,7 +38,7 @@ by.haul.positive <-
   summarise(n = sum(n))
 ```
 
-In the code above we have basically collapsed the abundance by length to abundance by haul. The number of records in the by.haul dataframe are `r nrow(by.haul.positive)` while the number of hauls in the haul dataframe are `r nrow(hh)`. The difference are hauls where no `r Latin` was caught.
+In the code above we have basically collapsed the abundance by length to abundance by haul. The number of records in the by.haul dataframe are `r nrow(by.haul.positive)` while the number of hauls in the haul dataframe are `r nrow(hh)`. The difference are hauls where no *`r Latin`* was caught.
 
 In order to include the stations with zero catch we:
 
@@ -65,7 +65,7 @@ table(by.haul$haulval, by.haul$n == 0, useNA = "ifany")
 
 reveals that we have `r by.haul %>% filter(haulval == "V", n > 0) %>% nrow()` valid hauls with `r Latin` and `r by.haul %>% filter(haulval == "V", n == 0) %>% nrow()` valid hauls where no `r Latin` was caught.
 
-Since we are here we may as well look at the temporal trend in the median abundance using only the valid hauls:
+Since we are here we may as well look at the temporal trend in the mean abundance using only the valid hauls:
 
 ```{r}
 by.haul %>% 
@@ -80,7 +80,7 @@ by.haul %>%
   scale_color_brewer(palette = "Set1") +
   labs(x = NULL, y = NULL,
        colour = "Quarter",
-       title = paste0(Latin, ": Mean number of per 1 hour haul"))
+       title = paste0(Latin, ": Mean number per 1 hour haul"))
 ```
 
 Now the trend in the abundance, particularly in the earlier part of the time-series may be confounded with the survey coverage and sampling design over time (TODO: More on that later).
@@ -91,6 +91,7 @@ Using the mean may not be appropriate here, given the general distribution of ab
 by.haul %>% 
   filter(haulval == "V") %>% 
   # put the values above the 99%th percentile to 99%th percentile
+  #  just for display purpose
   mutate(n = ifelse(n > quantile(n, 0.99), quantile(n, 0.99), n)) %>% 
   ggplot(aes(n)) +
   geom_histogram() +
@@ -98,7 +99,7 @@ by.haul %>%
        y = "Number of stations")
 ```
 
-Here we have most hauls with relatively small or zero catches with occasional hauls with very large catches resulting in a highly negatively scewed distribution. The ggplot2 package has a very nice summary statistics (bootstrap mean and standard error) that comes to the rescue:
+Here most hauls are with relatively small or zero catches with occasional hauls with very large catches resulting in a highly negatively scewed distribution. The ggplot2 package has a very nice summary statistics (bootstrap mean and standard error) that comes to the rescue:
 
 ```{r}
 by.haul %>% 
@@ -114,7 +115,7 @@ by.haul %>%
        subtitle = "Bootstrap mean and one standard error")
 ```
 
-### Weigth (biomass)
+### Biomass (weight)
 
 If one is interested in obtaining biomass trend the above code can easily be amendment (actually expanded), using some isometric length-weight parameters as a rough guess for the weight as a function of length (we will obtain more reasonable parameters based on some length-weight data in chapter XXX). We start from scratch and mutate length to weight before summarizing by weight for each haul:
 
@@ -206,7 +207,7 @@ glimpse(by.haul)
 
 Now the number of records in the "all" dataframe is `r nrow(all)`. This is equivalent to the number of valid hauls in the "hh" dataframe (`r hh %>% filter(haulval == "V") %>% nrow()` records) times the number of species we chose to work with (`r length(Latin)` species). Take also note, that the "by.haul" dataframe has the same number of records - so the left-join does not really add more records, just adds the abundance and the weight variables to the proper haul and species variable combination.
 
-So we are now able to calculate and plot the bootstrap means:
+So we are now able to calculate and plot the bootstrap means and standard error:
 ```{r}
 by.haul %>% 
   mutate(year = year + 0.25 * quarter - 0.125) %>% 
@@ -293,7 +294,7 @@ by.haul %>%
        subtitle = "NS-IBTS quarter 1 and 3")
 ```
 
-Similarly as one rasterized temperature in the haul chapter we could rasterize the biomass and plot it according to:
+Similarly as one rasterized temperature in the haul chapter we could rasterize the biomass by say statistical rectangles and plot it according to:
 ```{r, fig.height = 8}
 by.square <-
   by.haul %>% 
@@ -323,7 +324,7 @@ by.square %>%
        subtitle = "NS-IBTS, quarter 1")
 ```
 
-Must say that for the historical part the zero catch squares (for plaice) are a bit intriguing - is it a bug in the code, the way things were recorded in different cruises or a reflection of biological truth?
+NOTE: Must say that for the historical part the zero catch squares (for plaice) are a bit intriguing - is it a bug in the code, the way things were recorded in different cruises or a reflection of biological truth?
 
 ## CPUE per length per haul
 ___
@@ -339,6 +340,7 @@ by.haul.positive <-
   # Ignore sex, but tally up numbers by length
   group_by(id, latin, length) %>% 
   summarise(n = sum(n)) %>% 
+  ungroup() %>% 
   drop_na()
 ```
 
@@ -387,13 +389,15 @@ all <-
            latin = unique(by.haul.positive$latin))
 ```
 
-So we started with a haul dataframe with `r hh %>% filter(haulval == "V") %>% nrow()` observations and ending up with the "all" dataframe of some `r nrow(all)` records. This is a result of the unique length classes for the selected species is `r length(unique(by.haul.positive$length))`.
+So we started with a haul dataframe with `r hh %>% filter(haulval == "V") %>% nrow()` observations and ending up with the "all" dataframe of some `r nrow(all)` records. This is a result of the unique length classes for the selected species being `r length(unique(by.haul.positive$length))`.
 
-We now merge the dataframes so that we have a "complete matrix" of length, Latin and number of fish for each haul:
+NOTE: May actually want to code length above a sequence of from min to max lengths stepping by each length bin, because here we may have missing lengths bins somewhere "inbetween".
+
+We now merge the dataframes so that we have a "complete matrix" of length, latin and number of fish for each haul:
 ```{r}
 by.haul <- 
   all %>% 
-  left_join(by.haul.positive) %>% 
+  left_join(by.haul.positive, by = c("id", "length", "latin")) %>% 
   mutate(n = replace_na(n, 0),
          wt = n * 0.00001 * (length + 0.5)^3)
 ```

@@ -20,7 +20,7 @@ NOTE: Need to check interpretation of the n-variable (original name CANoAtLngt) 
 
 ### The principle - empirical approach
 
-Length data are relatively cheap to record relative to age data, because for the latter one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work in addition to counting rings. Hence in surveys the length measurements are more numerous, the objective being to estimate with good accuracy the length distribution of the catch at each station while otoliths are only collected from a smaller subsample of the catch.
+Length data are relatively cheap to record relative to age data, because for the latter one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work in addition to counting rings. Hence in surveys the length measurements are more numerous, the objective being to estimate with good precision the length distribution of the catch at each station while otoliths are only collected from a smaller subsample of the catch.
 
 The sub-samples of the age data is then used to calculate the probability of age for a given length class, generally called an age-length key (alk). This data is then used to split the length data into age classes.
 
