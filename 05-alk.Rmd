@@ -314,20 +314,116 @@ by.haul.age <-
   group_by(id, age) %>% 
   summarise(n = sum(p * n)) %>% 
   ungroup() %>% 
-  left_join(hh %>% 
-              filter(year == 2014,
-                     quarter == 3) %>% 
+  left_join(hh2 %>% 
               select(id, shootlong, shootlat),
             by = "id")
 ```
 
+But what if we wanted to generate an age-length-key for multiple years?
+
+```{r}
+hh3 <-
+  hh %>% 
+  filter(year %in% 2014:2017,
+         quarter == 3)
+ca3 <-
+  hh3 %>% 
+  select(id, year) %>% 
+  left_join(ca) %>% 
+  filter(latin == Latin) %>% 
+  mutate(length = floor(length),
+         age = ifelse(age > 9, 9, age)) %>% 
+  group_by(year, age, length) %>% 
+  summarise(n = sum(n)) %>% 
+  ungroup() %>% 
+  drop_na() %>% 
+  group_by(year) %>% 
+  nest() %>% 
+  # Have no idea why is should use the ".$data" rather than just "data"
+  mutate(alk = purrr::map(.$data, fit_alk))
+ca3
+
+# testing
+identical(ca3$alk[[1]], ca2 %>% fit_alk())
+
+```
+
+Or for that matter multiple years and multiple strata within a year??
+```{r, error = TRUE}
+hh4 <-
+  hh %>% 
+  filter(year %in% 2014:2017,
+         quarter == 3,
+         nsarea %in% 1:10) %>% 
+  mutate(nsarea = ifelse(nsarea <= 5, 1, 2))
+
+ca4 <-
+  hh4 %>% 
+  select(id, year, nsarea) %>% 
+  left_join(ca) %>% 
+  filter(latin == Latin) %>% 
+  mutate(length = floor(length),
+         age = ifelse(age > 9, 9, age)) %>% 
+  group_by(year, nsarea, age, length) %>% 
+  summarise(n = sum(n)) %>% 
+  ungroup() %>% 
+  drop_na() %>% 
+  group_by(year, nsarea) %>% 
+  nest() 
+
+ca4 %>% 
+  mutate(alk = purrr::map(.$data, fit_alk))
+ca4 %>% 
+  filter(year %in% c(2015, 2017)) %>% 
+  mutate(alk = purrr::map(.$data, fit_alk))
+```
+
+... is the error related to the data & model specifications or to the nesting approach?? Check with:
+
+```{r, error = TRUE}
+ca4$data[[1]] %>% fit_alk()
+```
+
+i.e. it is within the data & model specifications.
 
 
 #### Some other statistical model
 
 ... check @berg2012spatial
 
+```{r}
+library(mgcv)
 
+hh <- read_rds("data/ns-ibts_hh.rds")
+hl <- read_rds("data/ns-ibts_hl.rds")
+ca <- read_rds("data/ns-ibts_ca.rds")
+Year <- 2014
+Quarter <- 3
+Latin <- "Gadus morhua"
+hh2 <-
+  hh %>%
+  filter(year == Year,
+         quarter == Quarter)
+
+ca2 <-
+  hh2 %>%
+  select(id) %>%
+  left_join(ca, by = "id") %>%
+  filter(latin == Latin) %>%
+  mutate(length = floor(length),
+         age = ifelse(age > 9, 9, age)) %>%
+  group_by(id, age, length) %>%
+  summarise(n = sum(n)) %>%
+  ungroup() %>%
+  drop_na()
+
+alk <-
+  fitALKXX(ca2, minAge = 1, maxAge = 4) %>%
+  fit_alk10()
+glimpse(alk)
+```
+
+https://colinfay.me/tidyeval-1
 
 ### The engineer's approach
 
