@@ -285,3 +285,7 @@ cropMap <- st_crop(mapBase, xmin = -15, xmax = 30, ymin = 30, ymax = 60)
 ggplot(cropMap) + geom_sf()
 ```
 
+## Placeholder
+
+
+[Mastering Software Development in R](https://leanpub.com/msdr?utm_content=buffer75f6b&utm_medium=social&utm_source=twitter.com&utm_campaign=buffer)

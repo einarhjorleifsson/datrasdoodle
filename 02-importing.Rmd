@@ -1,5 +1,7 @@
 # Importing DATRAS {#import}
 
+see (see Figure \@ref(fig:allhauls))
+
 ## Preamble
 
 ```{r, warning = FALSE, message = FALSE}

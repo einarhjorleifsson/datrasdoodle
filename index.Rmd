@@ -21,11 +21,12 @@ description: "Better find some dam description ..."
 knitr::include_graphics("img/gagnakvorn.png")
 ```
 
-The process that leads to advice involves multiple steps both on data munging and (ab)use of models. The process from raw data to advice can in many cases be described as a low-pass filter being passed to another low-pass filter passed on to yet another low-pass filter. During these steps the information in the raw data is sometimes lost. Making inference/explaining how an advice relates to the raw data quite often difficult, if not impossible.
+The process that leads to fisheries advice involves multiple steps both on data munging and (ab)use of models. The process from raw data to advice can in many cases be described as a low-pass filter being passed to another low-pass filter passed on to yet another low-pass filter. During these steps the information in the raw data is sometimes lost. Making inference/explaining how an advice relates to the raw data quite often difficult, if not impossible.
 
-The scribble that follows contains snapshots/examples of tidyverse code used for data exploration analysis of the DATRAS dataset, (groundfish) survey data that is one of the two pillars of data sources (the other being commercial catch-at-age) that forms the corner of most advice based on analytical models.
+The scribble that follows contains snapshots/examples of tidyverse code used for data exploration analysis of scientific fisheries survey data that is one of the two pillars of data sources (the other being commercial catch-at-age) that forms the foundation of most advice. At present, the scribbles are a total mess, the space just a placeholder for some ad-hoc codes exploring the [DATRAS](http://datras.ices.dk) survey data (Figure \@ref(fig:allhauls))
 
-```{r, echo = FALSE, message = FALSE, warning = FALSE}
+
+```{r allhauls, echo = FALSE, message = FALSE, warning = FALSE, fig.cap='Location of hauls of different surveys.'}
 library(tidyverse)
 library(gisland)
 d <-
@@ -57,10 +58,6 @@ d %>%
   labs(colour = "Survey")
 ```
 
-The scribbles provided here are not to be considered as teaching the basics of the tidyverse coding framework, for that read [R for data science](http://r4ds.had.co.nz/) by @wickham2016r.
+Mind you, there is an R package out there ([DATRAS](https://github.com/DTUAqua/DATRAS/tree/master/DATRAS)) that has more or less every functionality needed to get the job done when analyzing DATRAS data. It is for all I have checked robust and succinct. It has a however only a rudimentary introductory [wiki](https://www.rforge.net/DATRAS/Tutorial.html).
 
-At present, the scribbles are a total mess, the space just some ad-hoc codes exploring the DATRAS data. The thinking/hope is that the space will ultimately become guidelines/templates/example codes on exploring, visualizing and utilizing the vast resource that the DATRAS data truly is.
-
-The aim is that the text as well as the R-code snippets should of course be human readable (a task that has been made more easy with the advent of the tidyverse sweep of packages) and fully reproducible (from a to z). Any additional functions beyond those currently available in the tidyverse dialect should be kept to an absolute minimum (tidy codes are all alike but every messy code is messy in its own way). But those added should be explained in detail.
-
-**Placeholder**: [Mastering Software Development in R](https://leanpub.com/msdr?utm_content=buffer75f6b&utm_medium=social&utm_source=twitter.com&utm_campaign=buffer)
+The motivation for the scribbles here was primarily to explore and analyse survey data using the tidyverse verbs and workflow^[The scribbles are not to be considered as teaching the basics of the tidyverse coding framework, for that read [R for data science](http://r4ds.had.co.nz/) by @wickham2016r.]., with specific esoteric functions related to a particular kind of data format kept to the absolute bare minimum. Kind of a testing ground to see how far one could get without leaving the environment.

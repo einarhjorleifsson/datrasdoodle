@@ -32,7 +32,7 @@ Like most fisheries data survey data are spatial in nature. So it is only natura
 
 Since in recent years at least both the start and end of the hauls are reported we can use the `geom_segment`-function to plot the haul track. The following scripts provides an overview of the data for one year by quarter and vessel:
 
-```{r}
+```{r haul-plot2, fig.cap = 'A little test'}
 # map of terrestrial area
 xlim <- c(-4, 13)
 ylim <- c(49, 62)
@@ -79,6 +79,8 @@ d %>%
        title = "NS-IBTS 2017",
        subtitle = "Number of hauls by ICES rectangles")
 ```
+
+Figure \@ref(fig:haul-plot2) is an example
 
 Note, that in contrast with the previous script we now "called" the terrestrial layer after the data-layer. Hence the squares that partially cover the water are masked with the shorelines (try revering the layer call in the script above).
 
