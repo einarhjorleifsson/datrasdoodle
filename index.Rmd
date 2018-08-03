@@ -1,5 +1,6 @@
 --- 
 title: "Playing with Datras data"
+subtitle: "... via tidyverse"
 author: "Einar Hjörleifsson"
 date: "`r Sys.Date()`"
 site: bookdown::bookdown_site
@@ -21,7 +22,7 @@ description: "Better find some dam description ..."
 knitr::include_graphics("img/gagnakvorn.png")
 ```
 
-The process that leads to fisheries advice involves multiple steps both on data munging and (ab)use of models. The process from raw data to advice can in many cases be described as a low-pass filter being passed to another low-pass filter passed on to yet another low-pass filter. During these steps the information in the raw data is sometimes lost. Making inference/explaining how an advice relates to the raw data quite often difficult, if not impossible.
+The process that leads to fisheries advice involves multiple steps both on data munging and use (and potentially abuse) of models. The process from raw data to advice can in many cases be described as a low-pass filter being passed to another low-pass filter passed on to yet another low-pass filter. During these steps the information in as well as the limitation of the raw data is sometimes lost. Making inference/explaining how an advice relates to the raw data quite often difficult, if not impossible.
 
 The scribble that follows contains snapshots/examples of tidyverse code used for data exploration analysis of scientific fisheries survey data that is one of the two pillars of data sources (the other being commercial catch-at-age) that forms the foundation of most advice. At present, the scribbles are a total mess, the space just a placeholder for some ad-hoc codes exploring the [DATRAS](http://datras.ices.dk) survey data (Figure \@ref(fig:allhauls))
 
