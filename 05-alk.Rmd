@@ -1,4 +1,8 @@
-# Age based indices {#alk}
+# Age data {#alk}
+
+## Preamble
+
+Load libraries and scripts:
 
 ```{r, warning = FALSE, message = FALSE}
 library(tidyverse)
@@ -8,57 +12,324 @@ library(patchwork)
 theme_set(theme_grey())
 ```
 
+Load data:
+
 ```{r}
 hh <- read_rds("data/ns-ibts_hh.rds")
 hl <- read_rds("data/ns-ibts_hl.rds")
 ca <- read_rds("data/ns-ibts_ca.rds")
 ```
 
-NOTE: Need to check interpretation of the n-variable (original name CANoAtLngt) in ca-data. The [DATRAS pages](https://datras.ices.dk/Data_products/FieldDescription.aspx?Fields=CANoAtLngt&SurveyID=2341) refer to this variable as meaning: "Amount of fish at the given category (per haul, species, length class, sex, maturity, age)."
+Length data from a haul are relatively cheap to record in situ. For more detail information, such as age one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work first. Hence in surveys the length measurements are frequently more numerous than some more detail measurements. The sampling objective for the length frequency measurements are to estimate with good precision the length distribution of the catch in each haul. This is either achieved by a full census measurement of the catch or if sub-sampling is warranted it is supposed to be based on a random sample from the catch^[NOTE: This should maybe have been emphasized in the chapter on length].
 
-NOTE: In some cases the haul numbers are "NA". Example:
-```{r}
-ca %>% 
-  filter(id == "2004_1_THA2_GOV_NA") %>% 
-  glimpse()
-# but
-hh %>% 
-  filter(id == "2004_1_THA2_GOV_NA") %>% 
-  glimpse()
-```
+The *a priori* sampling strategy for more detailed measurements on each fish is most often different from the sampling strategy for length frequency measurements. It could e.g. be based on obtaining some minimum number of measurements within each predetermined length bins (1 cm, 5 cm , ...) over some adjacent hauls (substrata), the objective to cover the full length span for the species in question. The bottom line is that the detailed data are **not necessarily a random subsample of the distribution within the catch**.
 
-So we have some sort of an orphan in the ca data
+Among the objectives of the detailed measurements are:
 
+* Estimate the relationship between length and weight
+* Estimate length as a function of age
+* Estimate the maturity 0-give either by length or age
+* Estimate the probability distribution of age classes for a given length class, often referred to as age-length-key (alk).
 
-## Converting length to age
+These relationships can either be derived empirically or established using some form of a statistical model. Once established, the metrics derived from the detailed data are then used in combination with the length frequency data to obtain estimates of various metrics of the actual catch.
 
-Length data from a catch are relatively cheap to record in situ. For age data one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work first. Hence in surveys the length measurements are more numerous, the objective being to estimate with good precision the length distribution of the catch at each station.
+In this section we are going to:
 
-### Introduction to the age data 
+* Explore the structure and the content of the detailed data
+* Introduce a tidyverse coding flow for fitting various common models to these data
 
-The primary objective of collecting data for age determination is to calculate the probability of age for a given length class, generally referred to as an age-length key (alk). Since the otoliths are collected from a smaller subsample of the catch than the length data at each station the former is not sufficient to determine the age distribution within a haul with sufficient precision.
-
-In fact the *a priori* sampling strategy for age determination is frequently based on some substrata (such as the nine North Sea roundfish areas) rather than on a single haul. Within each strata the objective is often to sample some minimum number within each predetermined length bins (1 cm, 5 cm , ...). This strategy differs from the length sampling which is either a full census from the catch or if sub-sampling is warranted supposed to be a random sample from the catch.
-
-Let's first look at the structure of the age dataframe:
+Lets take a peek:
 
 ```{r}
 glimpse(ca)
 ```
 
-The observations (rows) are the number of fish observed for a species, sex and maturity and age within a station. Ergo, within a haul for a particular species we could have more than one observations within a length group, this being because we may have different age, sex and maturities within the length group. As an example note these set of observations (here ignoring individual weights):
+The variable "id" is a reference to the the haul id, the variable being a link to the more detailed information about the haul that reside in the hh-dataframe. Take note that within the ca-data each row does not represent one fish unless the variable "n" is one. Rather, the observations (rows) are the number of fish (n) observed of a species, sex and maturity and age measured within a haul. Ergo, within a haul for a particular species we could have more than one observations within a length group, this being because we may have different age, sex and maturities within the length group. As an example^[NOTE: find a better one - i.e. where n > 1.] note these set of observations (here ignoring individual weights):
 
 ```{r}
 ca %>% 
   filter(latin == "Pleuronectes platessa",
          id == "2010_3_ARG_GOV_5",
          length == 26) %>% 
-  select(length, age, sex, maturity) %>% 
+  select(length, age, sex, maturity, n) %>% 
   distinct() %>% 
   arrange(age, sex, maturity)
 ```
 
-I.e. in this haul we have 8 combinations of age, sex and maturity for _Pleuronectes platessa_ in the length class 26 cm.
+I.e. in this haul we thus have 8 combinations of age, sex and maturity for _Pleuronectes platessa_ in the length class 26 cm.
+
+NOTE: What does the weight represent when n > 1?? E.g.:
+```{r}
+ca %>% 
+  filter(n > 1, !is.na(wgt), latin == "Gadus morhua") %>% 
+  glimpse()
+```
+
+## Length-weight relationship
+
+One of the most common task in fisheries science it to convert the more numerous length measurements to weights. In the section on [Length data](#length) we used a rough guess for the parameter of the length-weight relationship $\alpha = 0.00001$ and $\beta = 3$) Formally, the model of weight (W) as a function of length (L) is:
+
+$$W = \alpha L^{\beta}$$
+Normally the parameters are estimated based on the log-transformed data, i.e.:
+
+$$Ln(W) = ln(\alpha) + \beta Ln(L) + \epsilon$$
+Lets pick some data from a survey for some species:
+
+```{r}
+Latin <- c("Merlangius merlangus", "Clupea harengus",
+           "Melanogrammus aeglefinus", "Pleuronectes platessa",
+           "Sprattus sprattus", "Gadus morhua",
+           "Trisopterus esmarkii", "Pollachius virens",
+           "Eutrigla gurnardus")
+hh2 <-
+  hh %>% 
+  filter(year == 2018, 
+         quarter == 1)
+ca2 <-
+  hh %>% 
+  select(id) %>% 
+  left_join(ca) %>% 
+  filter(latin %in% Latin,
+         # only individually recorded fish
+         n == 1) %>%
+  select(latin, length, wgt) %>%
+  drop_na()
+```
+
+We can obtain a quick visualization of the data with ggplot:
+```{r}
+ca2 %>%
+  group_by(latin) %>%
+  # only 500 measurments per species (hence grouping above)
+  sample_n(size = 500) %>%
+  ggplot(aes(length, wgt, colour = latin)) +
+  geom_point(size = 0.2) +
+  geom_smooth(method = "lm") +
+  scale_colour_brewer(palette = "Set1") +
+  scale_x_log10(breaks = c(5, 10, 25, 50, 100)) +
+  scale_y_log10(breaks = c(5, 10, 100, 500, 2500, 5000)) +
+  theme(legend.position = c(0.8, 0.3)) +
+  labs(x = "Length [cm]",
+       y = "Weight [g]")
+```
+
+We observe that the relationship is linear and that for each species the linear-trend-line are slightly different (although not necessarily statistically different).
+
+The code for estimating the parameters in R for one species (here for *Pleuronectes platessa*) is something like:
+
+```{r}
+plaice <- 
+  ca2 %>% 
+  filter(latin == "Pleuronectes platessa") %>% 
+  mutate(l = log(length),
+         w = log(wgt))
+fit <- lm(w ~ l, data = plaice)
+fit
+```
+
+We here have the declaration of the model and the estimated value of the parameters. One can also in base-R get some more details of the fit via:
+```{r}
+summary(fit)
+```
+
+Besides observing that the fit is pretty good (all length-weight relationships have a good fit :-) the summary statistics give us a glimpse of estimated values of the parameters. To extract the coefficients in base-R one normally calls (not run):
+```{r, eval = FALSE}
+coefficients(fit)
+```
+
+But since we are focusing on the tidyverse lets check out what is in store for us in the broom-package:
+```{r}
+library(broom)
+tidy(fit)
+```
+
+Here the parameters are listed in the variable term and the estimated values are in the variable estimate. We also get additional associated statistic of each parameter as a bonus, all residing in a tidy dataframe.
+
+For the species in question we could now use the parameter estimates to convert length to weight in the length-frequency data. But we may want to do that for a number of species so we would need to get the estimated parameter values for each. Fortunately, the tidyverse consortium has come up with a very nice approach doing just that:
+
+```{r}
+lw_model <- function(df) {
+  lm(wgt ~ length, data = df)
+}
+ca2 %>% 
+  mutate(length = log(length),
+         wgt = log(wgt)) %>% 
+  group_by(latin) %>% 
+  nest() %>% 
+  #              | For each element in ...
+  #              |   | this list variable ...
+  #              |   |     | apply this function.
+  #              |   |     |
+  mutate(fit =   map(data, lw_model),
+         param = map(fit,  tidy)) %>% 
+  unnest(param, .drop = TRUE)
+```
+
+Now, I guess a little explaining may be in order here. It will though be kept to a bare minimum the reader being refereed to chapters [21.5 The map functions](http://r4ds.had.co.nz/iteration.html#the-map-functions) and [25 Many models](http://r4ds.had.co.nz/many-models.html#introduction-17) in the book [R for Data Science](http://r4ds.had.co.nz) for fuller details.
+
+The process above can be split into three steps:
+
+1. Nesting of the length and weight data by species.
+2. Estimation on model parameters values for each species (separately):
+    a. First fit the model
+    b. Then extract the parameter values
+3. Un-nesting the parameter statistics returning a single tibble
+
+**Step 1**
+
+```{r}
+step1 <-
+  ca2 %>% 
+  mutate(length = log(length),
+         wgt = log(wgt)) %>% 
+  group_by(latin) %>% 
+  nest()
+step1
+```
+
+In this step we basically split up the length and weight data into separate tibbles for each species, these being stored in the variable "data" that is a list (as indicated in the outprint above) column within the tibble "step1". The tibble "step1" basically has only 9 records (one for each species). Take note in the outprint above that the nibble's in the list all contain two variables (column) but different number of records (rows). E.g. for *Merlangius merlangus* we have 91250 records.
+
+Like all list we can access individual elements of the list by (here the first one, corresponding to *Merlangius merlangus*):
+
+```{r}
+step1$data[[1]]
+```
+
+**Step 2a**:
+
+In this step we fit the length-weight model for each species. Lets run the code and print the output:
+```{r}
+step2a <- 
+  step1 %>% 
+  #              | For each element in ...
+  #              |   | this list variable ...
+  #              |   |     | apply this function.
+  #              |   |     |
+  mutate(fit =   map(data, lw_model))
+step2a
+```
+
+We have generated a new variable (that is what mutate in principle always does). Again this object (fit) is a list, whose elements are of class "lm" (The "fit" object above, when we fitted the model for a single species is of the same class). Again, lets just check the first list element:
+
+```{r}
+step2a$model[[1]]
+```
+
+We here have the parametric values of the length-weight relationship for the first species in the tibble (*Merlangius merlangus*).
+
+The `map`-function above is a special function that operates on lists, the 1st argument being the reference to data to be used and the second argument is the function to be applied to the data. In this specific case the function had been defined above (here, repeated for clarity):
+
+```{r}
+lw_model <- function(df) {
+  lm(wgt ~ length, data = df)
+}
+```
+
+In the code execution above each of the element in the list-column "data" (i.e. for each species) is passed to the `lw_model`-function (where internally within the function it is referred to as "df") a function that is wrapper around the lm-model of weight as a function of length (both variables have been log-transformed earlier).
+
+**Step 2b**:
+
+...
+
+```{r}
+step2b <- 
+  step2a %>% 
+  #              | For each element in ...
+  #              |   | this list variable ...
+  #              |   |     | apply this function.
+  #              |   |     |
+  mutate(param = map(fit,  tidy))
+step2b
+```
+
+In this step we generate one more variable, named "param", this time a list of tibbles, each one having 2 rows and 5 columns. Lets take a peek into the first element:
+
+```{r}
+step2b$param[[1]]
+```
+
+Here we have the parameter value estimates and associated statistics for the first species (again *Merlangius merlangus*).
+
+**Step 3**:
+
+...
+
+```{r}
+step2b %>% 
+  unnest(param, .drop = TRUE)
+```
+
+The `unnest`-function is the inverse of the `nest`-function. The first argument is the list-variable we want to un-nest and the outcome is a neat tibble (all tibbles are neat :-) giving us the parameter estimates for each of the species.
+
+In order to proceed with the initial state objective (NOTE: Need to write that explicitly further up in the text flow) we need to tidy the above outcome a bit. What we need is a tibble with one record per species where the parameters $\alpha$ and $\beta$ are separate variables. Lets start from scratch (NOTE: I guess this is becoming a little bit repetititve) and do this is one tidy code flow:
+
+```{r}
+lw.parameters <- 
+  ca2 %>% 
+  mutate(length = log(length),
+         wgt = log(wgt)) %>% 
+  group_by(latin) %>% 
+  nest() %>% 
+  #              | For each element in ...
+  #              |   | this list variable ...
+  #              |   |     | apply this function.
+  #              |   |     |
+  mutate(fit =   map(data, lw_model),
+         param = map(fit,  tidy)) %>% 
+  unnest(param, .drop = TRUE) %>% 
+  # additional code
+  mutate(term = ifelse(term == "length", "b", "a")) %>% 
+  select(latin:estimate) %>% 
+  spread(term, estimate) %>% 
+  mutate(a = exp(a))
+  lw.parameters
+```
+
+We are now ready to proceed with estimating the catch weight per length per tow for the selected species using the length-frequency data:
+
+```{r}
+d <- 
+  hh2 %>% 
+  select(id, shootlong, shootlat) %>% 
+  left_join(hl %>% 
+              filter(latin %in% Latin) %>% 
+              select(-survey),
+            by = "id") %>% 
+  select(id:latin, length, n) %>% 
+  left_join(lw.parameters,
+            by = "latin") %>% 
+  mutate(wgt = n * a * length^b)
+```
+
+Ergo, instead of abundance (the "n" variable) we have (bio)mass (the "wgt" variable) by species, length class and haul. We can now easily summarize the data by haul, including coordinate position and do some spatial plot of the catch weights:
+```{r}
+d %>% 
+  group_by(id, shootlong, shootlat, latin) %>% 
+  summarise(bio = sum(wgt)) %>% 
+  ggplot() +
+  geom_point(aes(shootlong, shootlat, size = bio/1e3),
+             colour = "red",
+             alpha = 1/3) +
+  scale_size_area(max_size = 20) +
+  coord_quickmap() +
+  facet_wrap(~ latin)
+```
+
+We of course did similar thing in the length-chapter, the only difference now it that the value of the length-weight relationship in no longer a guess-work and constant for each species, but derived directly from the data source of the survey in question. Not that it really matters when viewing the data at the scale presented, but ......
+
+**... Revamp all text and code below ...**
+
+**... ERGO: STOP READING ...**
+
+## Introduction to the age data 
+
+
+
+Let's first look at the structure of the age dataframe:
+
+```{r}
+glimpse(ca)
+```
 
 
 
@@ -430,3 +701,21 @@ https://colinfay.me/tidyeval-1
 ...
 
 ## Age based indices
+
+
+## Issues
+
+NOTE: Need to check interpretation of the n-variable (original name CANoAtLngt) in ca-data. The [DATRAS pages](https://datras.ices.dk/Data_products/FieldDescription.aspx?Fields=CANoAtLngt&SurveyID=2341) refer to this variable as meaning: "Amount of fish at the given category (per haul, species, length class, sex, maturity, age)."
+
+NOTE: In some cases the haul numbers are "NA". Example:
+```{r}
+ca %>% 
+  filter(id == "2004_1_THA2_GOV_NA") %>% 
+  glimpse()
+# but
+hh %>% 
+  filter(id == "2004_1_THA2_GOV_NA") %>% 
+  glimpse()
+```
+
+So we have some sort of an orphan in the ca data
