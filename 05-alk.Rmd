@@ -1,4 +1,4 @@
-# Age data {#alk}
+# Detailed data {#alk}
 
 ## Preamble
 
@@ -65,12 +65,52 @@ ca %>%
   glimpse()
 ```
 
+
+```{r, eval = FALSE}
+# Taken from the length chapter, just a placeholder here
+### Biomass (weight)
+
+If one is interested in obtaining biomass trend the above code can easily be amendment (actually expanded), using some isometric length-weight parameters as a rough guess for the weight as a function of length (we will obtain more reasonable parameters based on some length-weight data in chapter XXX). We start from scratch and mutate length to weight before summarizing by weight for each haul:
+by.haul.positive <- 
+  hl %>% 
+  select(-sex) %>% 
+  filter(latin == Latin) %>% 
+  drop_na() %>% 
+  # additional code
+  mutate(wt = n * 0.00001 * length^3) %>% 
+  group_by(id) %>% 
+  summarise(n = sum(n),
+            # additional code
+            wt = sum(wt))
+
+by.haul <-
+  hh %>% 
+  select(id, year, quarter, haulval) %>% 
+  left_join(by.haul.positive) %>% 
+  mutate(n  = replace_na(n,  0),
+         # additional code
+         wt = replace_na(wt, 0))
+by.haul %>% 
+  filter(haulval == "V") %>% 
+  mutate(year = year + 0.25 * quarter - 0.125) %>% 
+  # Note: Here only replaced variable "n" with "wt":
+  ggplot(aes(year, wt, colour = factor(quarter))) +
+  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
+  expand_limits(y = 0) +
+  scale_color_brewer(palette = "Set1") +
+  labs(x = NULL, y = NULL,
+       colour = "Quarter",
+       title = paste("Mean catch [kg] of", Latin, "per 1 hour haul"),
+       subtitle = "Bootstrap mean and one standard error")
+```
+
+
 ## Length-weight relationship
 
-One of the most common task in fisheries science it to convert the more numerous length measurements to weights. In the section on [Length data](#length) we used a rough guess for the parameter of the length-weight relationship $\alpha = 0.00001$ and $\beta = 3$) Formally, the model of weight (W) as a function of length (L) is:
+One of the most common task in fisheries science it to convert the length frequency estimates of the catch (abundance) to weights. In the section on [Length data](#length) we used a rough guess for the parameter of the length-weight relationship $\alpha = 0.00001$ and $\beta = 3$). The mathematical relationship of weight (W) as a function of length (L) is:
 
 $$W = \alpha L^{\beta}$$
-Normally the parameters are estimated based on the log-transformed data, i.e.:
+Normally the parameters are estimated based on the log-transformed data^[NOTE: This has more to do with normalizing the variance in the dependent variable along the independent variable than linear models being more easy to fit (in the old days).], i.e.:
 
 $$Ln(W) = ln(\alpha) + \beta Ln(L) + \epsilon$$
 Lets pick some data from a survey for some species:
