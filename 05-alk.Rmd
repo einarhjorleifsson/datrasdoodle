@@ -1,6 +1,7 @@
 # Detailed data {#alk}
 
 ## Preamble
+___
 
 Load libraries and scripts:
 
@@ -16,20 +17,20 @@ Load data:
 
 ```{r}
 hh <- read_rds("data/ns-ibts_hh.rds")
-hl <- read_rds("data/ns-ibts_hl.rds")
 ca <- read_rds("data/ns-ibts_ca.rds")
+hl <- read_rds("data/ns-ibts_hl.rds")
 ```
 
 Length data from a haul are relatively cheap to record in situ. For more detail information, such as age one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work first. Hence in surveys the length measurements are frequently more numerous than some more detail measurements. The sampling objective for the length frequency measurements are to estimate with good precision the length distribution of the catch in each haul. This is either achieved by a full census measurement of the catch or if sub-sampling is warranted it is supposed to be based on a random sample from the catch^[NOTE: This should maybe have been emphasized in the chapter on length].
 
 The *a priori* sampling strategy for more detailed measurements on each fish is most often different from the sampling strategy for length frequency measurements. It could e.g. be based on obtaining some minimum number of measurements within each predetermined length bins (1 cm, 5 cm , ...) over some adjacent hauls (substrata), the objective to cover the full length span for the species in question. The bottom line is that the detailed data are **not necessarily a random subsample of the distribution within the catch**.
 
-Among the objectives of the detailed measurements are:
+Among the objectives of collecting the detailed measurements are:
 
-* Estimate the relationship between length and weight
-* Estimate length as a function of age
-* Estimate the maturity 0-give either by length or age
-* Estimate the probability distribution of age classes for a given length class, often referred to as age-length-key (alk).
+* Convert abundance to weight, using the relationship between length and weight.
+* Estimate spawning potential by estimating the maturity 0-give either by length or age.
+* Convert length frequency to age frequency via age-length-key.
+
 
 These relationships can either be derived empirically or established using some form of a statistical model. Once established, the metrics derived from the detailed data are then used in combination with the length frequency data to obtain estimates of various metrics of the actual catch.
 
@@ -104,13 +105,15 @@ by.haul %>%
        subtitle = "Bootstrap mean and one standard error")
 ```
 
+## Converting abundance to weight
+___
 
-## Length-weight relationship
+### Length-weight relationship
 
-One of the most common task in fisheries science it to convert the length frequency estimates of the catch (abundance) to weights. In the section on [Length data](#length) we used a rough guess for the parameter of the length-weight relationship $\alpha = 0.00001$ and $\beta = 3$). The mathematical relationship of weight (W) as a function of length (L) is:
+One of the most common task in fisheries science it to convert the length frequency estimates of the catch (abundance) to weights. The mathematical relationship of weight (W) as a function of length (L) is:
 
 $$W = \alpha L^{\beta}$$
-Normally the parameters are estimated based on the log-transformed data^[NOTE: This has more to do with normalizing the variance in the dependent variable along the independent variable than linear models being more easy to fit (in the old days).], i.e.:
+Normally the parameters $\alpha$ and $\beta$ are estimated based on the log-transformed data^[NOTE: This has more to do with normalizing the variance in the dependent variable along the independent variable than linear models being more easy to fit (in the old days).], i.e.:
 
 $$Ln(W) = ln(\alpha) + \beta Ln(L) + \epsilon$$
 Lets pick some data from a survey for some species:
@@ -125,8 +128,8 @@ hh2 <-
   hh %>% 
   filter(year == 2018, 
          quarter == 1)
-ca2 <-
-  hh %>% 
+lw <-
+  hh2 %>% 
   select(id) %>% 
   left_join(ca) %>% 
   filter(latin %in% Latin,
@@ -138,7 +141,7 @@ ca2 <-
 
 We can obtain a quick visualization of the data with ggplot:
 ```{r}
-ca2 %>%
+lw %>%
   group_by(latin) %>%
   # only 500 measurments per species (hence grouping above)
   sample_n(size = 500) %>%
@@ -158,21 +161,27 @@ We observe that the relationship is linear and that for each species the linear-
 The code for estimating the parameters in R for one species (here for *Pleuronectes platessa*) is something like:
 
 ```{r}
-plaice <- 
-  ca2 %>% 
+lw.one <- 
+  lw %>% 
   filter(latin == "Pleuronectes platessa") %>% 
   mutate(l = log(length),
          w = log(wgt))
-fit <- lm(w ~ l, data = plaice)
-fit
+fit <- lm(w ~ l, data = lw.one)
 ```
 
-We here have the declaration of the model and the estimated value of the parameters. One can also in base-R get some more details of the fit via:
+We have generated an object fit that has the following class:
+
+```{r}
+class(fit)
+```
+
+In base-R one can details of the model fit via:
 ```{r}
 summary(fit)
 ```
 
 Besides observing that the fit is pretty good (all length-weight relationships have a good fit :-) the summary statistics give us a glimpse of estimated values of the parameters. To extract the coefficients in base-R one normally calls (not run):
+
 ```{r, eval = FALSE}
 coefficients(fit)
 ```
@@ -183,15 +192,15 @@ library(broom)
 tidy(fit)
 ```
 
-Here the parameters are listed in the variable term and the estimated values are in the variable estimate. We also get additional associated statistic of each parameter as a bonus, all residing in a tidy dataframe.
+Here the `tidy`-function returns a tibble, where parameters are listed in the variable "term" and the estimated values are in the variable "estimate". We also get additional associated statistic of each parameter as a bonus, all neatly arranged in a tidy dataframe.
 
-For the species in question we could now use the parameter estimates to convert length to weight in the length-frequency data. But we may want to do that for a number of species so we would need to get the estimated parameter values for each. Fortunately, the tidyverse consortium has come up with a very nice approach doing just that:
+For the species in question we could now use the parameter estimates to convert length to weight in the length-frequency data. But we may want to do that for a number of species so we would need to get the estimated parameter values for each. Fortunately, the tidyverse gang has come up with a very nice approach doing just that:
 
 ```{r}
 lw_model <- function(df) {
   lm(wgt ~ length, data = df)
 }
-ca2 %>% 
+lw %>% 
   mutate(length = log(length),
          wgt = log(wgt)) %>% 
   group_by(latin) %>% 
@@ -219,7 +228,7 @@ The process above can be split into three steps:
 
 ```{r}
 step1 <-
-  ca2 %>% 
+  lw %>% 
   mutate(length = log(length),
          wgt = log(wgt)) %>% 
   group_by(latin) %>% 
@@ -227,9 +236,9 @@ step1 <-
 step1
 ```
 
-In this step we basically split up the length and weight data into separate tibbles for each species, these being stored in the variable "data" that is a list (as indicated in the outprint above) column within the tibble "step1". The tibble "step1" basically has only 9 records (one for each species). Take note in the outprint above that the nibble's in the list all contain two variables (column) but different number of records (rows). E.g. for *Merlangius merlangus* we have 91250 records.
+In this step we basically "split up" the length and weight data into separate tibbles for each species, these being stored in the variable <tt>data</tt> that is a list column (as indicated in the outprint above) within the tibble "step1". The tibble "step1" basically has only 9 records (one for each species). Take note in the outprint above that the tibble's in the list all contain two variables (columns) but different number of records (rows). E.g. for *Clupea harengus* we have 4083 records.
 
-Like all list we can access individual elements of the list by (here the first one, corresponding to *Merlangius merlangus*):
+Like all list we can access individual elements of the list by (here the first one, corresponding to *Clupea harengus*):
 
 ```{r}
 step1$data[[1]]
@@ -249,15 +258,15 @@ step2a <-
 step2a
 ```
 
-We have generated a new variable (that is what mutate in principle always does). Again this object (fit) is a list, whose elements are of class "lm" (The "fit" object above, when we fitted the model for a single species is of the same class). Again, lets just check the first list element:
+We have generated a new variable (that is what mutate in principle always does). Again this variable (<tt>fit</tt>) is a list, whose elements are of class "lm" (The same class as when we fitted the model for a single species above). Again, lets just check the first list element:
 
 ```{r}
-step2a$model[[1]]
+step2a$fit[[1]]
 ```
 
-We here have the parametric values of the length-weight relationship for the first species in the tibble (*Merlangius merlangus*).
+We here have the parametric values of the length-weight relationship for the first species in the tibble (*Clupea harengus*).
 
-The `map`-function above is a special function that operates on lists, the 1st argument being the reference to data to be used and the second argument is the function to be applied to the data. In this specific case the function had been defined above (here, repeated for clarity):
+The `map`-function above is a special function that operates on lists, the 1st argument being the reference to data to be used and the second argument is the function to be applied to the data. In this specific case the function had been defined above (repeated here for convenience):
 
 ```{r}
 lw_model <- function(df) {
@@ -265,7 +274,7 @@ lw_model <- function(df) {
 }
 ```
 
-In the code execution above each of the element in the list-column "data" (i.e. for each species) is passed to the `lw_model`-function (where internally within the function it is referred to as "df") a function that is wrapper around the lm-model of weight as a function of length (both variables have been log-transformed earlier).
+In the code execution above each of the element in the list-column <tt>data</tt> (i.e. for each species) is passed to the `lw_model`-function (where internally within the function it is referred to as "df") a function that is wrapper around the length-weight model (both variables have been log-transformed earlier).
 
 **Step 2b**:
 
@@ -282,13 +291,13 @@ step2b <-
 step2b
 ```
 
-In this step we generate one more variable, named "param", this time a list of tibbles, each one having 2 rows and 5 columns. Lets take a peek into the first element:
+In this step we generate one more variable, named <tt>param</tt>, this time a list of tibbles, each one having 2 rows and 5 columns. Lets take a peek into the first element:
 
 ```{r}
 step2b$param[[1]]
 ```
 
-Here we have the parameter value estimates and associated statistics for the first species (again *Merlangius merlangus*).
+Here we have the parameter value estimates and associated statistics for the first species (again *Clupea harengus*).
 
 **Step 3**:
 
@@ -299,36 +308,28 @@ step2b %>%
   unnest(param, .drop = TRUE)
 ```
 
-The `unnest`-function is the inverse of the `nest`-function. The first argument is the list-variable we want to un-nest and the outcome is a neat tibble (all tibbles are neat :-) giving us the parameter estimates for each of the species.
+The `unnest`-function is the inverse of the `nest`-function. The first argument is the list variable we want to un-nest and the outcome is a neat tibble (all tibbles are neat :-) giving us the parameter estimates for each of the species.
 
-In order to proceed with the initial state objective (NOTE: Need to write that explicitly further up in the text flow) we need to tidy the above outcome a bit. What we need is a tibble with one record per species where the parameters $\alpha$ and $\beta$ are separate variables. Lets start from scratch (NOTE: I guess this is becoming a little bit repetititve) and do this is one tidy code flow:
+### Estimating the weight of the catch
+
+In order to proceed with the initially state objective (NOTE: Need to write that explicitly further up in the text flow) we need to tidy the above outcome a bit. What we need is a tibble with one record per species where the parameters $\alpha$ and $\beta$ are separate variables. Lets start from scratch (NOTE: I guess this is becoming a little bit repetititve) and do this is one tidy code flow:
 
 ```{r}
 lw.parameters <- 
-  ca2 %>% 
-  mutate(length = log(length),
-         wgt = log(wgt)) %>% 
-  group_by(latin) %>% 
-  nest() %>% 
-  #              | For each element in ...
-  #              |   | this list variable ...
-  #              |   |     | apply this function.
-  #              |   |     |
-  mutate(fit =   map(data, lw_model),
-         param = map(fit,  tidy)) %>% 
+  step2b %>% 
   unnest(param, .drop = TRUE) %>% 
   # additional code
   mutate(term = ifelse(term == "length", "b", "a")) %>% 
   select(latin:estimate) %>% 
   spread(term, estimate) %>% 
   mutate(a = exp(a))
-  lw.parameters
+lw.parameters
 ```
 
 We are now ready to proceed with estimating the catch weight per length per tow for the selected species using the length-frequency data:
 
 ```{r}
-d <- 
+hl2 <- 
   hh2 %>% 
   select(id, shootlong, shootlat) %>% 
   left_join(hl %>% 
@@ -341,9 +342,10 @@ d <-
   mutate(wgt = n * a * length^b)
 ```
 
-Ergo, instead of abundance (the "n" variable) we have (bio)mass (the "wgt" variable) by species, length class and haul. We can now easily summarize the data by haul, including coordinate position and do some spatial plot of the catch weights:
+Ergo, in addition to the abundance (the <tt>n></tt> variable) we have added (bio)mass (the <tt>wgt</tt> variable) by species, length class and haul. We can now easily summarize the data by haul, including coordinate position and do some spatial plot of the catch weights:
 ```{r}
-d %>% 
+hl2 %>% 
+  drop_na() %>% 
   group_by(id, shootlong, shootlat, latin) %>% 
   summarise(bio = sum(wgt)) %>% 
   ggplot() +
@@ -355,407 +357,363 @@ d %>%
   facet_wrap(~ latin)
 ```
 
-We of course did similar thing in the length-chapter, the only difference now it that the value of the length-weight relationship in no longer a guess-work and constant for each species, but derived directly from the data source of the survey in question. Not that it really matters when viewing the data at the scale presented, but ......
+## Estimating spawning potentinal
+___
 
-**... Revamp all text and code below ...**
+### Preamble
 
-**... ERGO: STOP READING ...**
+Estimation of spawning stock biomass depends on having accurate maturity data. In the stock assessment world this part of the stock component is normally estimated as the sumproduct of stock in numbers, weight and maturity ogive for a given length or age class. The ogive is a value between 0 and 1 for a given size or length. In recent times is most often based on measuments from surveys, earlier it was frequently based on the measurements from the commercial catch.
 
-## Introduction to the age data 
-
-
-
-Let's first look at the structure of the age dataframe:
-
+Lets set the stage by filtering out some detailed data from selected species from a survey:
 ```{r}
-glimpse(ca)
-```
-
-
-
-Lets generate a code for an age-length-key for a particular species and survey from the age data, ignoring sex and maturity:
-
-```{r}
-Year <- 2014
-Quarter <- 3
-Latin <- "Gadus morhua"
-hh2 <-
-  hh %>% 
-  filter(year == Year,
-         quarter == Quarter)
-
-ca2 <- 
+Latin <- c("Merlangius merlangus", "Clupea harengus",
+           "Melanogrammus aeglefinus", "Pleuronectes platessa",
+           "Gadus morhua", "Pollachius virens","Eutrigla gurnardus")
+ca2 <-
   hh2 %>% 
   select(id) %>% 
-  left_join(ca, by = "id") %>% 
-  filter(latin == Latin) %>% 
-  mutate(length = floor(length),
-         age = ifelse(age > 9, 9, age)) %>% 
-  group_by(age, length) %>% 
-  summarise(n = sum(n)) %>% 
-  ungroup() %>% 
-  drop_na()
+  left_join(ca) %>% 
+  filter(latin %in% Latin) %>% 
+  mutate(length = floor(length))
+```
 
-alk.empirical <-
+If we look at the maturity count we have:
+
+```{r}
+ca2 %>% 
+  group_by(maturity) %>% 
+  summarise(n = sum(n))
+```
+
+According to [ICES vocabulary](http://vocab.ices.dk/?ref=128) the scale we have here is a 6-staged scale where the keys represent the following:
+
+* 61: Juvenile/Immature
+* 62: Maturing 
+* 63: Spawning
+* 64: Spent
+* 65: Resting/Skip of spawning
+* 66: Abnormal
+
+According to convention when using maturity to estimate spawning potential, maturing, spawning and spent are normally used. Here we will create a new variable, mature, that gets the value FALSE (equivalent to zero when doing summation statistics) if the maturity stage is 61 and TRUE (equivalent to one) if the maturity stage is any one of 62, 63 and 64. Any other values (resting, abnormal or missing observations) will be assigned as NA:
+
+```{r}
+ca2 <-
   ca2 %>% 
-  group_by(length) %>% 
-  mutate(p = n / sum(n, na.rm = TRUE)) %>% 
-  select(-n) %>% 
-  drop_na()
-
-alk.empirical %>% 
-  ggplot(aes(length, p, colour = factor(age))) +
-  geom_point() +
-  geom_line(lwd = 0.3, linetype = 5) +
-  scale_color_brewer(palette = "Set3") +
-  labs(x = "Length",
-       y = "Probability",
-       colour = "Age",
-       title = "Probability of age at length")
+  mutate(mature = case_when(maturity == "61" ~ FALSE,
+                         maturity %in% c("62", "63", "64") ~ TRUE,
+                         TRUE ~ NA))
 ```
 
-So for each length class we have observations (points) we have calculated the probability that a fish belongs to a particular age class. The sum of the probabilities within a length group is by definition always **one**. Lets take the 70 cm length class as an example:
+### Empirical determination
 
+Empirical estimations can easily be derived within the tidyverse code flow. 
 
-```{r}
-alk.empirical %>% 
-  filter(length == 70) %>% 
-  knitr::kable()
-```
+**Length based**
 
-Here we have 5 age-classes within the length class, the most numerous ones being age 3 (50%), then 4 (22%) and 5 (17%), while around 6% of the fish are of age 2 and 6.
+Basically we want to:
 
-### The principle - empirical approach
+* Tally up the number of immature and mature fish for each length class
+* Within each length class count the proportion of fish that is mature
 
-Lets visualize jointly the  length frequency and age-length-key for one species in one survey:
-
-```{r}
-by.haul <-
-  cpue_per_length_per_haul(hh2, hl, Latin)
-lfs <-
-  by.haul %>% 
-  group_by(length) %>% 
-  summarise(n = sum(n)) %>% 
-  ungroup() %>% 
-  # here only take positives
-  filter(n > 0)
-p1 <-
-  lfs %>% 
-  ggplot(aes(length, n)) +
-  theme_grey() +
-  geom_col() +
-  labs(x = NULL,
-       subtitle = "Length frequency")
-p2 <-
-  alk.empirical %>% 
-  mutate(age = ifelse(age > 9, 9, age)) %>% 
-  ggplot(aes(length, p, fill = factor(age))) +
-  theme_grey() +
-  scale_fill_brewer(palette = "Set3") +
-  geom_col() +
-  labs(x = "Length",
-       y = "Proportion",
-       fill = "Age",
-       subtitle = "Proportion of age at length")
-
-p1 + p2 + plot_layout(ncol = 1)
-```
-
-In principle we want to split the each length class of the length distribution (top graph) into separate age groups based on the age-length key probabilities (lower graph). Visually this may be easy for the first mode, almost all fish in each length class belonging to age group 0. Beyond that, each length class is most often composed of more than one age groups. 
-
-Lets look at the count tally in the 70 cm length class:
-
-```{r}
-lfs %>% filter(length == 70) %>% knitr::kable()
-```
-
-Here we have 36.5 fish counted. In the age-length key for the same length class (as already shown above) we have:
-```{r}
-alk.empirical %>% 
-  filter(length == 70) %>% 
-  knitr::kable()
-```
-
-We use the probability to split the length frequency within each length class into ages. Here we simply have to join the length-frequency and the alk dataframes and split the count tally (n) in each length group into number of fish at each age (n.nage) by multiply the number measured by length with the probability:
+The code flow below is something like:
 
 ```{r}
 d <- 
-  lfs %>% 
-  left_join(alk.empirical, by = "length") %>% 
-  mutate(n.age = p * n)
-```
-
-If we check the 70 cm length class again we now have an estimate of the number of fish by each age-class:
-```{r}
-d %>% 
-  filter(length == 70) %>% 
-  knitr::kable()
-```
-
-Ergo the tally of a total of 36.5 fish in the 70 cm length category have been split up into the 5 age classes (the variable "n" should actually be dropped, just to avoid confusion). Taking all the data we visually have the following:
-
-```{r}
-d %>% 
-  select(-n) %>% 
-  ggplot(aes(length, n.age, fill = factor(age))) +
-  theme_grey() +
-  geom_col() +
-  scale_fill_brewer(palette = "Set3") +
-  labs(x = "Length",
-       y = "n",
-       fill = "Age",
-       subtitle = "Length frequency by age")
-```
-
-Rather than first grouping all the length measurements from a survey and then apply the age-length-key as done above, one could use the latter to split the length distribution in each haul into age:
-```{r}
-by.haul.age <-
-  by.haul %>% 
-  left_join(alk.empirical) %>% 
-  group_by(id, age) %>% 
-  summarise(n = sum(p * n)) %>% 
-  ungroup() %>% 
-  left_join(hh %>% 
-              filter(year == 2014,
-                     quarter == 3) %>% 
-              select(id, shootlong, shootlat))
-```
-
-So now we have for each haul the estimated number of fish in each age group per 60 minute haul. E.g.:
-
-```{r}
-by.haul.age %>% 
-  # NOTE: Need to look into the NA's
-  slice(1:11) %>% 
-  knitr::kable()
-```
-
-Since we have also included the coordinates we can easily make a visual representation of abundance distribution by age:
-```{r}
-xlim <- range(by.haul.age$shootlong)
-ylim <- range(by.haul.age$shootlat)
-by.haul.age %>% 
-  filter(age %in% 0:3) %>% 
-  ggplot() +
-  geom_polygon(data = map_data("world", 
-                               xlim = xlim, ylim = ylim),
-               aes(long, lat, group = group),
-               fill = "grey") +
-  geom_point(aes(shootlong, shootlat, size = n),
-             colour = "red", alpha = 0.2) +
-  scale_size_area(max_size = 10) +
-  coord_quickmap(xlim = xlim, ylim = ylim) +
-  facet_wrap(~ age) +
-  labs(x = NULL, y = NULL,
-       size = "Abundance per hour")
-```
-
-The overall age distribution in the survey can then be visualized by:
-```{r}
-by.haul.age %>%
-  group_by(age) %>% 
-  summarise(n = mean(n)) %>% 
-  ggplot(aes(age, n)) +
-  geom_col() +
-  scale_x_continuous(breaks = 0:10) +
-  labs(x = "Age",
-       y = "Mean numbers per 1 hour haul")
-```
-
-### Statistical modelling
-
-In the above empirical approach there is a bit of a problem  - missingness :-)  The reader may have noticed the warning message given when plotting the "Length frequency by age":
-```
-## Warning: Removed 1 rows containing missing values (position_stack).
-```
-This message was given because varible n.age has one record with NA. It so happens that it is the first record so we can see it by:
-```{r}
+  ca2 %>% 
+  select(latin, length, n, mature) %>% 
+  drop_na() %>% 
+  group_by(latin, length, mature) %>% 
+  summarise(n = sum(n))
 glimpse(d)
 ```
 
-This means that length class 5 cm was recorded in the length measurements (hl), but no fish of that length class was aged (ca) in the year (2014) and quarter (3) for the species (Gadus morhua) in question. Since in this particular case it was the smallest length class one could obviously assign it "manually" to the youngest age group (age 0) in the dataset. But "missingness" of age samples in other length classes are bound to occur, particularly if we start to use some kind of spatial stratification of the age-length-key. So we need some generic approach. In this section we will take take some statistical approach.
+So far, we have only done the first step itemized above. There are different ways to code the latter step. What is done below is:
 
-#### The mlogit model
-
-....
-
-Reference to @henningsen2011maxlik
-
-Here, at least for the time being, we hide things in a little function:
+* To "explode" the counts, by using the function "uncount" such that one observation (row) is generated per fish measured based on the value of the variable n (LINK TO CODE SNIPPET).
+* Group each length class and species and then sum of the matured (TRUE is the same as 1 here) and divided by the total number of records (here number of fish measured).
 
 ```{r}
-alk.mlogit <-
-  ca2 %>% 
-  fit_alk(lengths = c(min(lfs$length):max(lfs$length)), model = "mlogit")
+ogive.by.length <- 
+  d %>% 
+  uncount(n) %>% 
+  group_by(latin, length) %>% 
+  summarise(p = sum(mature) / n())
 ```
 
-In the above step we start with the same dataframe (ca2) as used when generating the alk.empirical above and we end with an alk-dataframe that has the same structure as the alk.empirical generated above. The thing in the middle is a bit of a black box. Lets take a peek:
-
+Visually we have this:
 ```{r}
-alk.mlogit %>% filter(length == min(length)) %>% glimpse()
-```
-
-So even in the smallest length class (5 cm) we have some small probabilities that the fish will belong to some older age classes. Although biologically not really possible, that is statistics :-) The beauty is though that know we have solved the problem of "missingness" in our data - all length classes will be assigned to having some probabilities of belonging to all of the age classes in the data. Before we proceed, lets take a visual peek of what we have just done:
-
-```{r}
-ggplot() +
-  geom_point(data = alk.empirical,
-            aes(length, p, colour = factor(age))) +
-  geom_line(data = alk.empirical,
-            aes(length, p, colour = factor(age)),
-            lwd = 0.3, linetype = 5) +
-  geom_line(data = alk.mlogit,
-            aes(length, p, colour = factor(age))) +
-  scale_colour_brewer(palette = "Set3") +
+ogive.by.length %>% 
+  ggplot(aes(length, p)) +
+  geom_point(colour = "red") +
+  geom_line(linetype = 5) +
+  scale_color_brewer(palette = "Set1") +
+  scale_y_continuous(breaks = c(0, 0.25, 0.50, 0.75, 1.0)) +
+  facet_wrap(~ latin) +
   labs(x = "Length [cm]",
-       y = "Probability",
-       colour = "Age",
-       title = "Probability of age by length",
-       subtitle = "Empirical (points and dashed line) and mlogit fit (line)")
+       y = "Mature O-give")
 ```
 
-We can now use the modeled alk's to calculate the abundance in each haul by age:
+**Age based**:
 
-```{r}
-by.haul.age <-
-  by.haul %>% 
-  left_join(alk.mlogit, by = "length") %>% 
-  # NOTE: check why this is "needed"
+To derive the maturity ogive by age, one just switches variables, subsituting the length variable with the age variable in the code flow^[NOTE: In a succinct code-ing style where function is used one could call a "switch" with respect if length or the age variable is to by tallied.] (not run):
+
+```{r, eval = FALSE}
+ogive.by.age <- 
+  ca2 %>% 
+  select(latin, age, n, mature) %>% 
   drop_na() %>% 
-  group_by(id, age) %>% 
-  summarise(n = sum(p * n)) %>% 
-  ungroup() %>% 
-  left_join(hh2 %>% 
-              select(id, shootlong, shootlat),
-            by = "id")
-```
-
-But what if we wanted to generate an age-length-key for multiple years?
-
-```{r}
-hh3 <-
-  hh %>% 
-  filter(year %in% 2014:2017,
-         quarter == 3)
-ca3 <-
-  hh3 %>% 
-  select(id, year) %>% 
-  left_join(ca) %>% 
-  filter(latin == Latin) %>% 
-  mutate(length = floor(length),
-         age = ifelse(age > 9, 9, age)) %>% 
-  group_by(year, age, length) %>% 
+  group_by(latin, age, mature) %>% 
   summarise(n = sum(n)) %>% 
-  ungroup() %>% 
+  uncount(n) %>% 
+  group_by(latin, age) %>% 
+  summarise(p = sum(mature) / n()) 
+ogive.by.age %>% 
+  ggplot(aes(age, p)) +
+  geom_point(colour = "red") +
+  geom_line(linetype = 5) +
+  scale_color_brewer(palette = "Set1") +
+  scale_y_continuous(breaks = c(0, 0.25, 0.50, 0.75, 1.0)) +
+  facet_wrap(~ latin) +
+  labs(x = "Age",
+       y = "Mature O-give")
+```
+
+### Model approach
+
+If we have representative samples accross either length or age using the empirical approach may be sufficient. As seen e.g. for the length based saithe profile we obviously have some observation errors, most likely because of low sampling size within some length classes. We will also encounter missing length classes in the detailed data. Take e.g. the maturity length profile of haddock for the largest length classes:
+
+```{r}
+ogive.by.length %>% 
+  filter(latin == "Melanogrammus aeglefinus") %>% 
+  filter(length >= 60) %>% 
+  knitr::kable()
+```
+
+Here we have no measurments for length classes 63 through 66. We will look further into this "missingness" in the subsection dealing with converting length to age below. Bottom line is that using a statstical model may both allow us to smooth over any sampling error (read: too few samples taken) and make predictions for cases we have missing observations.
+
+Here below, instead of estimating the maturity ogive for different species in one survey and time we will do the estimate for one species over time.
+
+**Length based**
+
+
+```{r}
+
+model_ogive_length <- function(df) {
+  glm(mature ~ length, data = df, family = binomial)
+}
+
+Latin <- "Pleuronectes platessa"
+hh2 <- 
+  hh %>% 
+  filter(year >= 1990)
+# NOTE: Need to double check code below
+mat <- 
+  hh2 %>% 
+  select(id, year, quarter) %>% 
+  left_join(ca %>% 
+              filter(latin %in% Latin),
+            by = "id") %>% 
+  mutate(length = floor(length),
+         # take historical maturity scale into account
+         mature = case_when(maturity %in% c("1", "61") ~ FALSE,
+                         maturity %in% c("2", "3", "4", "62", "63", "64") ~ TRUE,
+                         TRUE ~ NA)) %>% 
+  select(year, quarter, latin, length, mature, n) %>% 
   drop_na() %>% 
-  group_by(year) %>% 
+  group_by(year, quarter, latin, length, mature) %>% 
+  summarise(n = sum(n)) %>% 
+  uncount(n) %>% 
+  group_by(year, quarter, latin) %>% 
   nest() %>% 
-  # Have no idea why is should use the ".$data" rather than just "data"
-  mutate(alk = purrr::map(.$data, fit_alk))
-ca3
-
-# testing
-identical(ca3$alk[[1]], ca2 %>% fit_alk())
-
+  #              | For each element in ...
+  #              |   | this list variable ...
+  #              |   |     | apply this function.
+  #              |   |     |
+  mutate(fit   = map(data, model_ogive_length),
+         param = map(fit,  tidy))
+mat
 ```
 
-Or for that matter multiple years and multiple strata within a year??
-```{r, error = TRUE}
-hh4 <-
-  hh %>% 
-  filter(year %in% 2014:2017,
-         quarter == 3,
-         nsarea %in% 1:10) %>% 
-  mutate(nsarea = ifelse(nsarea <= 5, 1, 2))
-
-ca4 <-
-  hh4 %>% 
-  select(id, year, nsarea) %>% 
-  left_join(ca) %>% 
-  filter(latin == Latin) %>% 
-  mutate(length = floor(length),
-         age = ifelse(age > 9, 9, age)) %>% 
-  group_by(year, nsarea, age, length) %>% 
-  summarise(n = sum(n)) %>% 
-  ungroup() %>% 
-  drop_na() %>% 
-  group_by(year, nsarea) %>% 
-  nest() 
-
-ca4 %>% 
-  mutate(alk = purrr::map(.$data, fit_alk))
-ca4 %>% 
-  filter(year %in% c(2015, 2017)) %>% 
-  mutate(alk = purrr::map(.$data, fit_alk))
+We have now fitted 53 models, corresponding to the number of years and quarter. Lets check the worst fits:
+```{r}
+mat %>% 
+  # tidy table of the parameter estimates
+  unnest(param, .drop = TRUE) %>% 
+  arrange(desc(p.value)) %>% 
+  knitr::kable()
 ```
 
-... is the error related to the data & model specifications or to the nesting approach?? Check with:
-
-```{r, error = TRUE}
-ca4$data[[1]] %>% fit_alk()
-```
-
-i.e. it is within the data & model specifications.
-
-
-#### Some other statistical model
-
-... check @berg2012spatial
+So it seems like the year 1991 and 1996 in quarter 1 have not a very good fit. Lets take a peek:
 
 ```{r}
-library(mgcv)
+library(modelr)
+x <-
+  mat %>%
+  filter(year %in% c(1991, 1996),
+         quarter == 1)
+d <-
+  x %>% 
+  unnest(data) %>% 
+  group_by(year, quarter, length) %>% 
+  summarise(p = sum(mature) / n())
+x %>% 
+  mutate(pred = map2(data, fit, add_predictions)) %>% 
+  unnest(pred) %>% 
+  ## need to transform the predictions into probabilities
+  mutate(pred = plogis(pred)) %>% 
+  ggplot() +
+  geom_point(data = d, aes(length, p)) +
+  geom_line(aes(length, pred)) +
+  facet_wrap(~ year)
+```
 
-hh <- read_rds("data/ns-ibts_hh.rds")
-hl <- read_rds("data/ns-ibts_hl.rds")
+```{r}
+mat %>%
+  mutate(pred = map2(data, fit, add_predictions)) %>% 
+  unnest(pred) %>% 
+  mutate(pred = plogis(pred)) %>% 
+  filter(length == 25) %>% 
+  ggplot(aes(year, pred, colour = factor(quarter))) +
+  geom_point() +
+  geom_line() +
+  scale_color_brewer(palette = "Set1") +
+  ylim(0, 1) +
+  labs(x = "Year",
+       y = "Proportion mature",
+       colour = "Quarter",
+       title = "Pleuronectes platessa",
+       subtitle = "Proportion mature at 25 cm length")
+```
+
+So, which quarter represents the true maturity at age in the population??
+
+Now the formula for the l50 is −α/β which we can calulate using the tidy function:
+
+```{r}
+mat %>% 
+  unnest(param) %>% 
+  select(year:estimate) %>% 
+  spread(term, estimate) %>% 
+  mutate(l50 = -`(Intercept)`/length) %>% 
+  ggplot(aes(year, l50, colour = factor(quarter))) +
+  geom_point() +
+  geom_line() +
+  coord_cartesian(ylim = c(0, 35)) +
+  scale_color_brewer(palette = "Set1")
+```
+
+
+
+**NOTE: TEXT BELOW NEEDS REVAMPTING, PART OF IT IS BLATANTLY WRONG**
+
+... Something about the model
+
+### One species
+
+Lets start with only focusing on one species (here *Pleuronectes platessa*)
+
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(modelr)
 ca <- read_rds("data/ns-ibts_ca.rds")
-Year <- 2014
-Quarter <- 3
-Latin <- "Gadus morhua"
-hh2 <-
-  hh %>%
-  filter(year == Year,
-         quarter == Quarter)
-
-ca2 <-
-  hh2 %>%
-  select(id) %>%
-  left_join(ca, by = "id") %>%
-  filter(latin == Latin) %>%
-  mutate(length = floor(length),
-         age = ifelse(age > 9, 9, age)) %>%
-  group_by(id, age, length) %>%
-  summarise(n = sum(n)) %>%
-  ungroup() %>%
-  drop_na()
-
-alk <-
-  fitALKXX(ca2, minAge = 1, maxAge = 4) %>%
-  fit_alk10()
-glimpse(alk)
+d <- 
+  ca %>% 
+  filter(latin == "Pleuronectes platessa") %>% 
+  # CHECK: Not sure if this is correct
+  mutate(mature = ifelse(maturity %in% c(1, 61), 0, 1)) %>% 
+  drop_na() %>% 
+  filter(sex %in% c("M", "F"))
 ```
 
-https://colinfay.me/tidyeval-1
+An empirical fit:
 
-### The engineer's approach
-
-...
-
-## Age based indices
-
-
-## Issues
-
-NOTE: Need to check interpretation of the n-variable (original name CANoAtLngt) in ca-data. The [DATRAS pages](https://datras.ices.dk/Data_products/FieldDescription.aspx?Fields=CANoAtLngt&SurveyID=2341) refer to this variable as meaning: "Amount of fish at the given category (per haul, species, length class, sex, maturity, age)."
-
-NOTE: In some cases the haul numbers are "NA". Example:
 ```{r}
-ca %>% 
-  filter(id == "2004_1_THA2_GOV_NA") %>% 
-  glimpse()
-# but
-hh %>% 
-  filter(id == "2004_1_THA2_GOV_NA") %>% 
-  glimpse()
+d2 <-
+  d %>% 
+  group_by(age) %>% 
+  summarise(p = sum(mature / n()),
+            n = n())
+
+model <- glm(mature ~ age, data = d, family = binomial)
+
+grid <-
+  data_frame(age = seq_range(d$age, 20)) %>% 
+  mutate(pY = predict(model, newdata = ., type = 'response'))
+
+ggplot(d, aes(x = age)) +
+  geom_point(aes(y = mature)) +
+  geom_line(data = grid, aes(y = pY)) +
+  geom_point(data = d2, aes(y = p), colour = "red")
+  
+model <- glm(mature ~ age + sex, data = d, family = binomial)
+
+grid <-
+  d %>% 
+  data_grid(age, sex) %>% 
+  mutate(pY = predict(model, newdata = ., type = 'response'))
+# or
+#library(broom)
+#res <-
+#  d %>% 
+#  data_grid(age, sex) %>% 
+#  augment(x = model, newdata = ., type.predict = "response") %>% 
+#  as_tibble()
+
+grid %>% 
+  ggplot(aes(age, pY, colour = sex)) +
+  geom_line() +
+  expand_limits(y = 0)
+
+# or just
+ggplot(d, aes(age, mature, colour = sex)) + 
+    geom_point() + 
+    geom_smooth(method = 'glm', method.args = list(family = 'binomial')) + 
+    scale_y_continuous()
 ```
 
-So we have some sort of an orphan in the ca data
+
+```{r message = FALSE}
+common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
+            "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
+            "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
+d <- 
+  ca %>% 
+  filter(latin %in% common) %>% 
+  as_tibble() %>% 
+  mutate(mature = ifelse(maturity %in% c(1, 61), 0, 1)) %>% 
+  drop_na() %>% 
+  filter(sex %in% c("M", "F"))
+
+
+res <-
+  d %>% 
+  group_by(latin) %>%
+  do(tidy(glm(mature ~ age, data = ., family = binomial)))
+res <- 
+  d %>% 
+  group_by(latin) %>%
+  do(fit = glm(mature ~ age, data = ., family = binomial))
+res
+res %>% tidy(fit)
+res %>% glance(fit)
+# here really want to predict using new shorter data frame
+
+res %>% 
+  augment(fit, type.predict = "response") %>% 
+  filter(age <= 10) %>% 
+  ggplot(aes(age, .fitted, colour = latin)) +
+  geom_line(lwd = 1) +
+  scale_colour_brewer(palette = "Set1") +
+  scale_x_continuous(breaks = 0:10) +
+  theme(legend.position = c(0.75, 0.3)) +
+  expand_limits(y = 0)
+```
+
+## Estimating abundance by age
+___
+
+### Empirical age-length keys
+
+### Model approach
+
+### Calculation of age based indices
