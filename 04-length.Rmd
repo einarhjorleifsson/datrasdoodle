@@ -5,6 +5,10 @@ ___
 
 Length data from a haul are relatively cheap to record in situ. For more detail information, such as age one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work first. Hence in surveys the length measurements are frequently more numerous than some more detail measurements. The sampling objective for the length frequency measurements are to estimate with good precision the length distribution of the catch in each haul. This is either achieved by a full census measurement of the catch or if sub-sampling is warranted it is supposed to be based on a random sample from the catch.
 
+In this chapter we show ...
+
+
+
 Load libraries and data:
 
 ```{r, warning = FALSE, message = FALSE}
@@ -19,13 +23,10 @@ hh <- read_rds("data/ns-ibts_hh.rds")
 hl <- read_rds("data/ns-ibts_hl.rds")
 ```
 
-
-
 ## Catch per haul (Abundance)
 ___
 
-
-Since in the tidying process all length data counts were standardized to 60 minutes haul time it is relatively straight forward to calculate the standardized abundance per 60 minute haul. Lets do this for some species of choice:
+Since in the tidying process all length data counts were standardized to 60 minutes haul time it is relatively straight forward to calculate the abundance per 60 minute haul. Lets do this for some species of choice:
 
 ```{r}
 Latin <- "Pleuronectes platessa"
@@ -34,7 +35,7 @@ by.haul.positive <-
   select(-sex) %>% 
   filter(latin == Latin) %>% 
   # NOTE: I am not sure if the next step is kosher
-  #       Basically droping rows where length and/or n is NA
+  #       Basically dropping rows where length and/or n is NA
   #       Check with the DATRAS experts
   drop_na() %>% 
   group_by(id) %>% 
@@ -66,7 +67,7 @@ A quick count:
 table(by.haul$haulval, by.haul$n == 0, useNA = "ifany")
 ```
 
-reveals that we have `r by.haul %>% filter(haulval == "V", n > 0) %>% nrow()` valid hauls with `r Latin` and `r by.haul %>% filter(haulval == "V", n == 0) %>% nrow()` valid hauls where no `r Latin` was caught.
+reveals that we have `r by.haul %>% filter(haulval == "V", n > 0) %>% nrow()` valid hauls with `r Latin` and `r by.haul %>% filter(haulval == "V", n == 0) %>% nrow()` valid hauls where no *`r Latin`* was caught.
 
 Since we are here we may as well look at the temporal trend in the mean abundance using only the valid hauls:
 
@@ -115,7 +116,7 @@ by.haul %>%
   labs(x = NULL, y = NULL,
        colour = "Quarter",
        title = paste("Mean number of", Latin, "per 1 hour haul"),
-       subtitle = "Bootstrap mean and one standard error")
+       subtitle = "Bootstrap mean and confidence intervals")
 ```
 
 The above code could easily be amended if one were interested in exploring the trend for lets say only the larger sized fish (only one line needs to be added).
@@ -140,7 +141,7 @@ by.haul.positive <-
   summarise(n = sum(n))
 ```
 
-Now, since we have more than one species the following **will not work** for us (see [on missingness](#onmissingness) in the Auxiliary chapter, explaining why with some simplified haul and count dataframes as examples):
+Now, since we have more than one species the following **will not work** for us (see [on missingness](#onmissingness) in the Auxiliary chapter, explaining why using some simplified haul and count dataframes as examples):
 
 ```{r, eval = FALSE}
 # Not run
@@ -168,7 +169,7 @@ glimpse(by.haul)
 
 Now the number of records in the "all" dataframe is `r nrow(all)`. This is equivalent to the number of valid hauls in the "hh" dataframe (`r hh %>% filter(haulval == "V") %>% nrow()` records) times the number of species we chose to work with (`r length(Latin)` species). Take also note, that the "by.haul" dataframe has the same number of records - so the left-join does not really add more records, just adds the abundance and the weight variables to the proper haul and species variable combination.
 
-So we are now able to calculate and plot the bootstrap means and standard error:
+So we are now able to calculate and plot the bootstrap means and confidence interval:
 ```{r}
 by.haul %>% 
   mutate(year = year + 0.25 * quarter - 0.125) %>% 
@@ -179,7 +180,7 @@ by.haul %>%
   labs(x = NULL, y = NULL,
        colour = "Quarter",
        title = "Mean number of fish per 1 hour haul",
-       subtitle = "Bootstrap mean and one standard error") +
+       subtitle = "Bootstrap mean and confidence interval") +
   facet_wrap(~ latin, scale = "free_y")
 ```
 
@@ -274,7 +275,7 @@ by.haul.positive <-
   drop_na()
 ```
 
-Lets take some two random station and look at the data by length:
+Lets take some two "random" station and look at the data by length:
 ```{r}
 set.seed(31)
 IDS <-
@@ -300,7 +301,7 @@ by.haul.positive <-
   hl %>% 
   filter(latin == Latin) %>% 
   mutate(length = floor(length)) %>% 
-  group_by(id, latin, length) %>% 
+  group_by(id, length) %>% 
   summarise(n = sum(n)) %>% 
   drop_na()
 ```
@@ -315,38 +316,37 @@ all <-
   filter(haulval == "V") %>% 
   # Lets only carry forward variables "needed"
   select(id, year, quarter, shootlong, shootlat, faoarea) %>% 
-  crossing(length = sort(unique(by.haul.positive$length)),
-           latin = unique(by.haul.positive$latin))
+  crossing(length = c(min(by.haul.positive$length):max(by.haul.positive$length)))
 ```
 
-So we started with a haul dataframe with `r hh %>% filter(haulval == "V") %>% nrow()` observations and ending up with the "all" dataframe of some `r nrow(all)` records. This is a result of the unique length classes for the selected species being `r length(unique(by.haul.positive$length))`.
-
-NOTE: May actually want to code length above a sequence of from min to max lengths stepping by each length bin, because here we may have missing lengths bins somewhere "inbetween".
+So we started with a haul dataframe with `r hh %>% filter(haulval == "V") %>% nrow()` observations and ending up with the "all" dataframe of some `r nrow(all)` records. This is a result of the span of the length classes for the selected species being `r length(min(by.haul.positive$length):max(by.haul.positive$length))`.
 
 We now merge the dataframes so that we have a "complete matrix" of length, latin and number of fish for each haul:
 ```{r}
 by.haul <- 
   all %>% 
-  left_join(by.haul.positive, by = c("id", "length", "latin")) %>% 
+  left_join(by.haul.positive, by = c("id", "length")) %>% 
   mutate(n = replace_na(n, 0))
 ```
 
-Lets now look at the two hauls we peeked at earlier (Table xxx):
+Lets now look at the two hauls we peeked at earlier (only 34 first records):
 
 ```{r}
 by.haul %>% 
   filter(id %in% IDS) %>% 
   select(id, length, n) %>% 
   spread(id, n) %>% 
+  slice(1:34) %>% 
   knitr::kable()
 ```
 
-We have now a complete record for all lengths classes reported in the survey and for each of the length class we have the number of observations including zero counts. This includes hauls were no fish for a particular species was measured. As an example:
+We have now a complete record for all lengths classes reported in the survey and for each of the length class we have the number of observations including zero counts. This includes hauls were no fish for a particular species was measured. As an example (only top and bottom part shown):
 
 ```{r}
 by.haul %>% 
   filter(id == "2018_1_58G2_GOV_10") %>% 
   select(id, length, n) %>% 
+  slice(c(1:10, 58:67)) %>% 
   knitr::kable()
 ```
 
@@ -378,7 +378,7 @@ cpue %>%
 Take note that we can easily repeat the calculation of catch-per-unit-effort by year as done in the first subsection above using the "by.haul" dataframe that does not have any "missingness" created in this subsection (not run):
 ```{r, eval = FALSE}
 by.haul %>% 
-  group_by(id, year, quarter, latin) %>% 
+  group_by(id, year, quarter) %>% 
   summarise(n = sum(n)) %>% 
   ungroup() %>% 
   mutate(year = year + 0.25 * quarter - 0.125) %>% 
@@ -389,8 +389,7 @@ by.haul %>%
   labs(x = NULL, y = NULL,
        colour = "Quarter",
        title = "Mean catch [fish] per 1 hour haul",
-       subtitle = "Bootstrap mean and one standard error") +
-  facet_wrap(~ latin, scale = "free_y")
+       subtitle = "Bootstrap mean and confidence interval")
 ```
 
 ### A little convenient function
@@ -414,7 +413,7 @@ cpue_per_length_per_haul <- function(hh, hl, Latin) {
     filter(haulval == "V") %>% 
     # Lets only carry forward variables "needed"
     select(id, year, quarter) %>% 
-    crossing(length = sort(unique(by.haul.positive$length)),
+    crossing(length = c(min(by.haul.positive$length):max(by.haul.positive$length))),
              latin = unique(by.haul.positive$latin))
   
   by.haul <- 
@@ -427,7 +426,7 @@ cpue_per_length_per_haul <- function(hh, hl, Latin) {
 }
 ```
 
-This code is available in the R/00_main.R script and we can source it (and other functions that may reside in the file) by:
+The above code emulates to a large degree the calculation provide by the "DATRAS service product" referred to as "CPUE per length per hour haul". The code is available in the R/00_main.R script and hence in "production mode" one could source it (and other functions that may reside in the file) by:
 ```{r}
 source("R/00_main.R")
 ```
@@ -462,167 +461,3 @@ d %>%
   ggplot(aes(length, n)) +
   stat_summary(fun.data = "mean_cl_boot", size = 0.1)
 ```
-
-## Emulating DATRAS service product
-
-NOTE: Some intro notes here ...
-
-```{r}
-common <- c("Clupea harengus", "Sprattus sprattus", "Gadus morhua",
-            "Melanogrammus aeglefinus", "Merlangius merlangus", "Pollachius virens",
-            "Trisopterus esmarkii", "Scomber scombrus", "Pleuronectes platessa")
-cpue <- 
-  # only valid hauls
-  # Note: This is an inbuild function - not exactly the same as above
-  tidyices::cpue_per_length_per_haul(hh = hh %>% filter(haulval == "V", !is.na(nsarea)),
-                           hl = hl) %>% 
-  filter(latin %in% common) %>% 
-  # debugging, this should be fixed upstream
-  filter(!is.na(length))
-```
-
-```{r}
-# comparision with the datras-product
-Latin <- "Pleuronectes platessa"
-d1 <- 
-  cpue %>% 
-  id_separate(remove = FALSE) %>% 
-  filter(latin == Latin,
-         year == 2016,
-         quarter == 1) %>% 
-  select(id, latin, length, n) %>% 
-  mutate(length = as.integer(length * 10),
-         source = "tidy") %>% 
-  arrange(id, length, n)
-fi <- 
-  "data-raw/CPUE per length per haul per hour_2018-06-30 15_34_50.csv"
-d2 <-
-  read_csv(fi, na = "-9") %>% 
-  rename_all(tolower) %>% 
-  filter(species == Latin,
-         year == 2016,
-         quarter == 1) %>% 
-  id_unite() %>% 
-  select(id, 
-         latin = species, 
-         length = lngtclass, 
-         n = cpue_number_per_hour) %>% 
-  as_tibble() %>% 
-  mutate(source = "datras") %>% 
-  arrange(id, length, n)
-d1 %>% 
-  bind_rows(d2) %>% 
-  spread(source, n) %>% 
-  mutate(diff = !near(tidy, datras, tol = 1e-4)) %>% 
-  filter(diff) 
-```
-
-
-
-
-```{r, message = FALSE, warning = FALSE}
-cpue2 <-
-  cpue %>%
-  id_separate(remove = FALSE) %>%
-  filter(year %in% 2005:2016) %>% 
-  select(id, latin, length, cpue.tidy = n) %>% 
-  mutate(length = as.integer(length * 10))
-fi <- 
-  "data-raw/CPUE per length per haul per hour_2018-06-30 15_34_50.csv"
-cpue.datras.service.product <-
-  read_csv(fi, na = "-9") %>% 
-  rename_all(tolower)
-cpue.datras.service.product <-
-  cpue.datras.service.product %>%
-  filter(year %in% 2005:2016) %>% 
-  id_unite() %>% 
-  select(id, latin = species, length = lngtclass, cpue.dsp = cpue_number_per_hour) %>% 
-  as_tibble()
-
-diff <-
-  cpue2 %>% 
-  full_join(cpue.datras.service.product) %>%
-  mutate(diff = !near(cpue.dsp, cpue.tidy, tol = 1e-4),
-         txt = ifelse(!diff, "Same",
-                      ifelse(diff, "Difference", "One of the value is NA")))
-diff %>% 
-  group_by(txt) %>% 
-  summarise(n.records = n()) %>% 
-  knitr::kable()
-```
-
-We have 515584 records that are OK and then 953 records that are different. We have 1642 values that are "NA" meaning that either of the cpue or both were missing.
-
-```{r}
-x <- diff %>% filter(is.na(txt))
-table(!is.na(x$cpue.tidy), !is.na(x$cpue.dsp))
-```
-
-So have 1374 observations that are in "tidy" but not in "dsp" and 268 observations in "dsp" that are not in "tidy"
-
-**Lets print the 268 observations that are not in "tidy"**:
-
-```{r}
-diff %>% 
-  filter(is.na(txt), !is.na(cpue.dsp)) %>% 
-  arrange(latin) %>% 
-  knitr::kable()
-```
-
-What is the story with the single haddock?:
-```{r}
-raw <- read_rds("data-raw/datras/ns-ibts_raw.rds")
-hl_raw <-
-  raw$hl %>% 
-  rename_all(tolower)
-hl_raw %>% 
-  as_tibble() %>% 
-  id_unite() %>% 
-  filter(id == "2009_1_THA2_GOV_26",
-         valid_aphia == 126437) %>% glimpse()
-```
-
-So, it does not appear in the hl_raw dataframe. And because these are all of `lngtcode == "0"` these fish are what is termed as 0.5 cm length class, reporting units of millimeter. For the time being this does not quite make sense in my head.
-
-What do we have in tidy for the haul and species in question?:
-```{r}
-cpue2 %>% 
-  filter(id == "2009_1_THA2_GOV_26",
-         latin == "Melanogrammus aeglefinus") %>% glimpse()
-```
-
-So no 20 cm fish
-
-And in the dsp:
-```{r}
-cpue.datras.service.product %>% 
-  filter(id == "2009_1_THA2_GOV_26",
-         latin == "Melanogrammus aeglefinus") %>% glimpse()
-```
-
-We have only 20, 30 and 40 cm fish. So it seems like in the dsp the length class are treated as millimeters that are then converted to centimeters by rounding.
-
-
-## Field names
-___
-
-* **StNo**: National coding system, not defined by ICES
-* **HaulNo**: Sequential numbering of hauls during cruise. In CA-records: HaulNo = -9 for Area-based ALK HaulNo <> -9 and > 0 for Haul-based ALK
-* **DataType**:
-    - -9: Invalid haul
-    - C: Data calculated as CPUE (number per hour)
-    - R: Data by haul
-    - S: Subsample data
-* **SpecCodeType**:
-    - N: NODC code
-    - T: TSN code
-    - W: WoRMS ApiaID code
-* **LngtCode**:
-    - .:	1 mm length class, reporting units: mm
-    - 0:	0.5 cm length class, reporting units: mm
-    - 1:	1 cm length class, reporting units: cm
-* **CatIdentifier**: Category for subsampling for species, length, weight, and sex. If **DataType** is C, **CatIdentifier** is always 1. For further description and examples of use look up the manual.
-* **SubFactor**: Sub-sampling factor. If 1/6 of the catch was measured, report 6. If **DataType** is:
-    - C: it should be reported as 1. 
-    - S: it is always >1.
-    - R: the SubFactor is = 1 or >1 for different species depending on whether they were subsampled.

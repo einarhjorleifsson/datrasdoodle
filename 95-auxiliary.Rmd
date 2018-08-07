@@ -88,38 +88,38 @@ d <-
 d
 ```
 
-Now if we were to calculate the mean abundance over all hauls on can **not** do:
+Now if wanted to obtain the mean abundance per one can **not** do:
 ```{r}
 d %>% summarise(m = mean(n))
 ```
 
-because we would not be taking account of the zero fish caught in haul with id = 2.
+because we would not be taking into account of the zero fish caught in haul with id = 2.
 
 Hence we have to merge the counts from the length dataframe with the station dataframe. Something like this:
 ```{r}
 hh %>% 
-  left_join(d)
+  left_join(d, by = "id")
 ```
 
-Now, here haul 2 has the abundance variable assigned as NA. To get the mean abundance could try:
+Here haul 2 has the abundance variable assigned as NA. To get the mean abundance could try:
 ```{r}
 hh %>% 
-  left_join(d) %>% 
+  left_join(d, by = "id") %>% 
   summarise(m = mean(n))
 ```
 
 This however generates an NA. One could try:
 ```{r}
 hh %>% 
-  left_join(d) %>% 
+  left_join(d, by = "id") %>% 
   summarise(m = mean(n, na.rm = TRUE))
 ```
 
 But this would give us the mean of the positive stations (as we already obtained above). So effectively we have to assign a value of zero to the abundance when it is NA. The full pipeline would hence be:
 ```{r}
 hh %>% 
-  left_join(hl) %>% 
-  mutate(n = ifelse(is.na(n), 0, n)) %>% 
+  left_join(hl, by = "id") %>% 
+  mutate(n = replace_na(n, 0)) %>% 
   group_by(id) %>% 
   summarise(n = sum(n)) %>% 
   summarise(m = mean(n))

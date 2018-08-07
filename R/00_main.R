@@ -18,7 +18,7 @@ cpue_per_length_per_haul <- function(hh, hl, Latin) {
     filter(haulval == "V") %>%
     # Lets only carry forward variables "needed"
     select(id, year, quarter) %>%
-    crossing(length = sort(unique(by.haul.positive$length)),
+    crossing(length = c(min(by.haul.positive$length):max(by.haul.positive$length)),
              latin = unique(by.haul.positive$latin))
 
   by.haul <-
