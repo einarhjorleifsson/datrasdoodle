@@ -461,3 +461,25 @@ d %>%
   ggplot(aes(length, n)) +
   stat_summary(fun.data = "mean_cl_boot", size = 0.1)
 ```
+
+## Recap
+
+Starting from scratch (raw DATRAS exchange data) one can obtain the CPUE per length per hour haul via (not run):
+
+```{r, eval = FALSE}
+Latin <- "Gadus morhua"
+
+library(tidyverse)
+source("R/00_main.R")
+species <- read_csv("ftp://ftp.hafro.is/pub/reiknid/einar/datras_worms.csv")
+raw <- read_rds("data-raw/datras/ns-ibts_raw.rds")
+hh <-
+  raw$hh %>% 
+  tidy_hh()
+hl <-
+  raw$hl %>% 
+  tidy_hl(hh, species)
+d <-
+  cpue_per_length_per_haul(hh, hl, Latin)
+```
+

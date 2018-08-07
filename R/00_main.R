@@ -6,7 +6,7 @@ cpue_per_length_per_haul <- function(hh, hl, Latin) {
 
   by.haul.positive <-
     hl %>%
-    filter(latin == Latin) %>%
+    filter(latin %in% Latin) %>%
     mutate(length = floor(length)) %>%
     # Note: we are collapsing sex and maturity
     group_by(id, latin, length) %>%
@@ -19,7 +19,7 @@ cpue_per_length_per_haul <- function(hh, hl, Latin) {
     # Lets only carry forward variables "needed"
     select(id, year, quarter) %>%
     crossing(length = c(min(by.haul.positive$length):max(by.haul.positive$length)),
-             latin = unique(by.haul.positive$latin))
+             latin = Latin)
 
   by.haul <-
     all %>%

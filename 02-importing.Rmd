@@ -133,7 +133,7 @@ A convenient functions, `tidy_hl` basically takes care of the above, it specific
 In order for this to complete its job, we need in addition to the raw hl-dataframe to pass the tidy haul-dataframe (because that is where the variable DataType is stored). And to convert the coded species information to Latin name we need to supply the proper "lookup" table (TODO: provide link the the auxiliary chapter explaining how one can obtain this from scratch rather via the temporary csv file):
 
 ```{r, message = FALSE, warning = FALSE, eval = FALSE}
-species <- read_csv("http://www.hafro.is/~einarhj/datrasdoodle/species.csv")
+species <- read_csv("ftp://ftp.hafro.is/pub/reiknid/einar/datras_worms.csv")
 hl <-
   raw$hl %>% 
   tidy_hl(hh, species)
