@@ -6,6 +6,7 @@ ___
 Load libraries and scripts:
 
 ```{r, warning = FALSE, message = FALSE}
+library(maps)  # load before loading purrr
 library(tidyverse)
 library(modelr)
 library(broom)
@@ -25,14 +26,13 @@ hl <- read_rds("data/ns-ibts_hl.rds")
 
 Length data from a haul are relatively cheap to record in situ. For more detail information, such as age one needs to read annual rings from hard structure (normally otoliths) which require often laborious preparatory work first. Hence in surveys the length measurements are frequently more numerous than some more detail measurements. The sampling objective for the length frequency measurements are to estimate with good precision the length distribution of the catch in each haul. This is either achieved by a full census measurement of the catch or if sub-sampling is warranted it is supposed to be based on a random sample from the catch^[NOTE: This should maybe have been emphasized in the chapter on length].
 
-The *a priori* sampling strategy for more detailed measurements on each fish is most often different from the sampling strategy for length frequency measurements. It could e.g. be based on obtaining some minimum number of measurements within each predetermined length bins (1 cm, 5 cm , ...) over some adjacent hauls (substrata), the objective to cover the full length span for the species in question. The bottom line is that the detailed data are **not necessarily a random subsample of the distribution within the catch**.
+The *a priori* sampling strategy for more detailed measurements on each fish is most often different from the sampling strategy for length frequency measurements. It could e.g. be based on obtaining some minimum number of measurements within each predetermined length bins (1 cm, 5 cm , ...) per station or over some adjacent hauls (substrata), the objective to cover the full length span for the species in question. The bottom line is that the detailed data are **not necessarily a random subsample of the distribution within the catch**.
 
 Among the objectives of collecting the detailed measurements are:
 
 * Convert abundance to weight, using the relationship between length and weight.
 * Estimate spawning potential by estimating the maturity 0-give either by length or age.
 * Convert length frequency to age frequency via age-length-key.
-
 
 These relationships can either be derived empirically or established using some form of a statistical model. Once established, the metrics derived from the detailed data are then used in combination with the length frequency data to obtain estimates of various metrics of the actual catch.
 
@@ -41,7 +41,7 @@ In this section we are going to:
 * Explore the structure and the content of the detailed data
 * Introduce a tidyverse coding flow for fitting various common models to these data
 
-Lets take a peek:
+Lets take a peek at the detailed data:
 
 ```{r}
 glimpse(ca)
@@ -68,51 +68,14 @@ ca %>%
   glimpse()
 ```
 
-
-```{r, eval = FALSE}
-# Taken from the length chapter, just a placeholder here
-### Biomass (weight)
-
-If one is interested in obtaining biomass trend the above code can easily be amendment (actually expanded), using some isometric length-weight parameters as a rough guess for the weight as a function of length (we will obtain more reasonable parameters based on some length-weight data in chapter XXX). We start from scratch and mutate length to weight before summarizing by weight for each haul:
-by.haul.positive <- 
-  hl %>% 
-  select(-sex) %>% 
-  filter(latin == Latin) %>% 
-  drop_na() %>% 
-  # additional code
-  mutate(wt = n * 0.00001 * length^3) %>% 
-  group_by(id) %>% 
-  summarise(n = sum(n),
-            # additional code
-            wt = sum(wt))
-
-by.haul <-
-  hh %>% 
-  select(id, year, quarter, haulval) %>% 
-  left_join(by.haul.positive) %>% 
-  mutate(n  = replace_na(n,  0),
-         # additional code
-         wt = replace_na(wt, 0))
-by.haul %>% 
-  filter(haulval == "V") %>% 
-  mutate(year = year + 0.25 * quarter - 0.125) %>% 
-  # Note: Here only replaced variable "n" with "wt":
-  ggplot(aes(year, wt, colour = factor(quarter))) +
-  stat_summary(fun.data = "mean_cl_boot", size = 0.1) +
-  expand_limits(y = 0) +
-  scale_color_brewer(palette = "Set1") +
-  labs(x = NULL, y = NULL,
-       colour = "Quarter",
-       title = paste("Mean catch [kg] of", Latin, "per 1 hour haul"),
-       subtitle = "Bootstrap mean and one standard error")
-```
-
 ## Converting abundance to weight
 ___
 
+In the previous chapter we provided a code flow to determine the catch **numbers** for per length class per standardized tow. In this subsection we are going describe the process for getting the estimated **weight** of the catch. Before doing so we first introduce how one can estimate the parameters that describe the weight as a function of length.
+
 ### Length-weight relationship
 
-One of the most common task in fisheries science it to convert the length frequency estimates of the catch (abundance) to weights. The mathematical relationship of weight (W) as a function of length (L) is:
+One of the most common task in fisheries science it to convert the length frequency estimates of the catch (abundance) to weights. The mathematical relationship of weight (W) as a function of length (L) is often described as:
 
 $$W = \alpha L^{\beta}$$
 Normally the parameters $\alpha$ and $\beta$ are estimated based on the log-transformed data^[NOTE: This has more to do with normalizing the variance in the dependent variable along the independent variable than linear models being more easy to fit (in the old days).], i.e.:
@@ -133,7 +96,7 @@ hh2 <-
 lw <-
   hh2 %>% 
   select(id) %>% 
-  left_join(ca) %>% 
+  left_join(ca, by = "id") %>% 
   filter(latin %in% Latin,
          # only individually recorded fish
          n == 1) %>%
@@ -158,7 +121,9 @@ lw %>%
        y = "Weight [g]")
 ```
 
-We observe that the relationship is linear and that for each species the linear-trend-line are slightly different (although not necessarily statistically different).
+We observe that the relationship is roughly linear and that for each species the linear-trend-line are slightly different (although not necessarily statistically different).
+
+#### One species
 
 The code for estimating the parameters in R for one species (here for *Pleuronectes platessa*) is something like:
 
@@ -177,7 +142,7 @@ We have generated an object fit that has the following class:
 class(fit)
 ```
 
-In base-R one can details of the model fit via:
+In base-R one can get details of the model fit via:
 ```{r}
 summary(fit)
 ```
@@ -188,14 +153,20 @@ Besides observing that the fit is pretty good (all length-weight relationships h
 coefficients(fit)
 ```
 
-But since we are focusing on the tidyverse lets check out what is in store for us in the broom-package:
+But since we are focusing on the tidyverse code flow lets check out what is in store for us in the broom-package:
 ```{r}
 tidy(fit)
 ```
 
-Here the `tidy`-function returns a tibble, where parameters are listed in the variable "term" and the estimated values are in the variable "estimate". We also get additional associated statistic of each parameter as a bonus, all neatly arranged in a tidy dataframe.
+Here the `tidy`-function returns a long tibble, where parameters are listed in the variable "term" and the estimated values are in the variable "estimate". We also get additional associated statistic of each parameter as a bonus, all neatly arranged in a tidy dataframe.
 
-For the species in question we could now use the parameter estimates to convert length to weight in the length-frequency data. But we may want to do that for a number of species so we would need to get the estimated parameter values for each. Fortunately, the tidyverse gang has come up with a very nice approach doing just that:
+For the species in question we could now use the parameters estimated to convert catch in numbers to catch in weight.
+
+#### Multiple species
+
+NOTE: This case scenario (lw-coefficient estimates for a bunch of species) is may not be the most stimulating (in terms of wanting to learn) - think of an alternative when introducing the concepts of multimodels.
+
+We may want to do get the length-weight coefficients for a bunch of species. Fortunately, the tidyverse gang has come up with a very nice approach doing just that:
 
 ```{r}
 lw_model <- function(df) {
@@ -227,6 +198,8 @@ The process above can be split into three steps:
 
 **Step 1**
 
+In this step we basically "split up" the length and weight data into separate tibbles for each species, these being stored in the variable <tt>data</tt> that is a list column (as indicated in the outprint above) within the tibble "step1".
+
 ```{r}
 step1 <-
   lw %>% 
@@ -237,7 +210,7 @@ step1 <-
 step1
 ```
 
-In this step we basically "split up" the length and weight data into separate tibbles for each species, these being stored in the variable <tt>data</tt> that is a list column (as indicated in the outprint above) within the tibble "step1". The tibble "step1" basically has only 9 records (one for each species). Take note in the outprint above that the tibble's in the list all contain two variables (columns) but different number of records (rows). E.g. for *Clupea harengus* we have 4083 records.
+The tibble "step1" has only 9 records (one for each species). Take note in the outprint above that the tibble's in the "data" list-variable all contain two variables (columns) but different number of records (rows). E.g. for *Clupea harengus* we have 4083 records.
 
 Like all list we can access individual elements of the list by (here the first one, corresponding to *Clupea harengus*):
 
@@ -259,7 +232,7 @@ step2a <-
 step2a
 ```
 
-We have generated a new variable (that is what mutate in principle always does). Again this variable (<tt>fit</tt>) is a list, whose elements are of class "lm" (The same class as when we fitted the model for a single species above). Again, lets just check the first list element:
+We have generated a new variable (that is what mutate in principle always does). Again this variable (<tt>fit</tt>) is a list, whose elements are of class "lm" (The same class as when we fitted the model for a single species above). Lets just check the first list element:
 
 ```{r}
 step2a$fit[[1]]
@@ -275,11 +248,11 @@ lw_model <- function(df) {
 }
 ```
 
-In the code execution above each of the element in the list-column <tt>data</tt> (i.e. for each species) is passed to the `lw_model`-function (where internally within the function it is referred to as "df") a function that is wrapper around the length-weight model (both variables have been log-transformed earlier).
+In the code execution above each of the element in the list-column <tt>data</tt> (i.e. for each species) is passed to the `lw_model`-function (where internally within the function it is referred to as "df"), a function that is wrapper around the length-weight model.
 
 **Step 2b**:
 
-...
+Since the elements in the list-column fit are not tidy we apply an additional coding step to achieve that:
 
 ```{r}
 step2b <- 
@@ -302,23 +275,22 @@ Here we have the parameter value estimates and associated statistics for the fir
 
 **Step 3**:
 
-...
+In the final step we want to get one tibble for the parameter estimates of all species.
 
 ```{r}
-step2b %>% 
+step3 <-
+  step2b %>% 
   unnest(param, .drop = TRUE)
+step3
 ```
 
-The `unnest`-function is the inverse of the `nest`-function. The first argument is the list variable we want to un-nest and the outcome is a neat tibble (all tibbles are neat :-) giving us the parameter estimates for each of the species.
+The `unnest`-function is the inverse of the `nest`-function. The first argument is the list variable we want to un-nest and the outcome is a neat tibble (all tibbles are neat :-) giving us the parameter estimates and associated statistics for each species.
 
-### Estimating the weight of the catch
-
-In order to proceed with the initially state objective (NOTE: Need to write that explicitly further up in the text flow) we need to tidy the above outcome a bit. What we need is a tibble with one record per species where the parameters $\alpha$ and $\beta$ are separate variables. Lets start from scratch (NOTE: I guess this is becoming a little bit repetititve) and do this is one tidy code flow:
+One more step may be warranted before we proceed: What we need is a tibble with one record per species where the parameters $\alpha$ and $\beta$ are separate variables:
 
 ```{r}
 lw.parameters <- 
-  step2b %>% 
-  unnest(param, .drop = TRUE) %>% 
+  step3 %>% 
   # additional code
   mutate(term = ifelse(term == "length", "b", "a")) %>% 
   select(latin:estimate) %>% 
@@ -327,35 +299,77 @@ lw.parameters <-
 lw.parameters
 ```
 
+### Estimating the standardized weight of the catch
+
+#### One species
+
+... may be needed, for clarity
+
+#### Multiple species
+
 We are now ready to proceed with estimating the catch weight per length per tow for the selected species using the length-frequency data:
 
 ```{r}
-hl2 <- 
-  hh2 %>% 
-  select(id, shootlong, shootlat) %>% 
-  left_join(hl %>% 
-              filter(latin %in% Latin) %>% 
-              select(-survey),
-            by = "id") %>% 
-  select(id:latin, length, n) %>% 
-  left_join(lw.parameters,
-            by = "latin") %>% 
-  mutate(wgt = n * a * length^b)
+Latin <- c("Merlangius merlangus", "Clupea harengus",
+           "Melanogrammus aeglefinus", "Pleuronectes platessa",
+           "Sprattus sprattus", "Gadus morhua",
+           "Trisopterus esmarkii", "Pollachius virens",
+           "Eutrigla gurnardus")
+hh2 <-
+  hh %>% 
+  filter(haulval == "V",
+         year == 2018, 
+         quarter == 1) %>% 
+  select(id, year, quarter, lon = shootlong, lat = shootlat)
+hl2 <-
+  cpue_per_length_per_haul(hh2, hl, Latin)
+
+hl2 <-
+  hl2 %>% 
+  left_join(lw.parameters, by = "latin") %>% 
+  mutate(wgt = (n * a * (length + 0.5)^b) / 1e3)
 ```
 
-Ergo, in addition to the abundance (the <tt>n></tt> variable) we have added (bio)mass (the <tt>wgt</tt> variable) by species, length class and haul. We can now easily summarize the data by haul, including coordinate position and do some spatial plot of the catch weights:
+Ergo, in addition to the number (the <tt>n></tt> variable) we have added weights (the <tt>wgt</tt> variable) by species, length class and haul. Lets check the overall mean distribution by numbers versus weight:
+
 ```{r}
 hl2 %>% 
+  group_by(id, length) %>% 
+  summarise(n = sum(n),
+            wgt = sum(wgt)) %>% 
+  group_by(length) %>% 
+  summarise(n = mean(n),
+            wgt = mean(wgt)) %>% 
+  gather(variable, value, n:wgt) %>% 
+  filter(length <= 110) %>% 
+  ggplot(aes(length, value)) +
+  geom_line() +
+  facet_grid(variable ~ ., scale = "free_y")
+```
+
+We can now easily summarize the data by haul, including coordinate position and do some spatial plot of the catch weights:
+```{r}
+d <-
+  hl2 %>% 
   drop_na() %>% 
-  group_by(id, shootlong, shootlat, latin) %>% 
-  summarise(bio = sum(wgt)) %>% 
+  group_by(id, lon, lat, latin) %>% 
+  summarise(bio = sum(wgt))
+xlim <- range(d$lon)
+ylim <- range(d$lat)
+d %>% 
   ggplot() +
-  geom_point(aes(shootlong, shootlat, size = bio/1e3),
+  geom_polygon(data = map_data("world", xlim = xlim, ylim = ylim),
+               aes(long, lat, group = group),
+               fill = "grey") +
+  geom_point(aes(lon, lat, size = bio/1e3),
              colour = "red",
              alpha = 1/3) +
   scale_size_area(max_size = 20) +
-  coord_quickmap() +
-  facet_wrap(~ latin)
+  coord_quickmap(xlim = xlim, ylim = ylim) +
+  facet_wrap(~ latin) +
+  scale_x_continuous(NULL, NULL) +
+  scale_y_continuous(NULL, NULL) +
+  labs(size = "t hr-1")
 ```
 
 ## Estimating spawning potentinal
@@ -497,7 +511,6 @@ Here below, instead of estimating the maturity ogive for different species in on
 **Length based**
 
 ```{r}
-
 model_ogive_length <- function(df) {
   glm(mature ~ length, data = df, family = binomial)
 }
@@ -540,6 +553,7 @@ mat %>%
   # tidy table of the parameter estimates
   unnest(param, .drop = TRUE) %>% 
   arrange(desc(p.value)) %>% 
+  slice(1:10) %>% 
   knitr::kable()
 ```
 
@@ -565,6 +579,8 @@ x %>%
   geom_line(aes(length, pred)) +
   facet_wrap(~ year)
 ```
+
+So, a data issue.
 
 ```{r}
 mat %>%
