@@ -1,0 +1,73 @@
+# Managing DATRAS data {#mgm}
+
+**THIS IS STILL VERY, VERY VERY MUCH A TESTING GROUND**
+
+Load libraries and scripts:
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(fs)
+library(tidyices)
+```
+
+## Data storage system
+
+One of the greatest hinderance when analysing DATRAS data is that a direct sql-connection to the database is not (yet) available for users outside the ICES secretary. So in order to work with the data one has first to have a local copy of the data. Given that the database gets frequently updated both with newly collected survey data as well corrections and or modification of older data keeping the local copy of the data in sync with the latest DATRAS version is a challenge in its own self. What makes it even more challenging is that it is impossible for the outside user to know what data has changed and when did it changed.
+
+There are plenty of routes available for storing and maintaining the downloaded raw DATRAS data on your computer so what is suggested here is just one method. In the process here we suggest that local copies of the raw DATRAS data is stored in a single directory (here we use data-raw/datras) with the file name of the format "survey_year_quarter_xx.rds", where the xx stands for hh, hl and ca. I.e. each year and quarter for a specific survey as well as table is stored as a separate file. There were two main reason for selecting this storage structure (explain better):
+
+1. Will be easier to update.
+2. One can choose if one only wants to work on lets say haul data.
+
+## Datras overview
+
+We can get an overview of the available years and quarters for each survey in the DATRAS database by using the `get_datras_overview`. E.g. if one were interested in the ROCKALL and BTS-VIII surveys one would get the available years and quarters by: 
+```{r}
+surveys <-
+  tidyices:::get_datras_overview(survey = c("ROCKALL", "BTS-VIII"))
+surveys %>% 
+  knitr::kable()
+```
+
+## Downloading
+
+```{r}
+surveys %>% 
+  tidyices:::download_datras(path = "data-raw/datras")
+```
+
+Available surveys:
+```{r}
+surveys <- 
+  dir_info("data-raw/datras") %>% 
+  mutate(survey = basename(path)) %>% 
+  select(survey, size, time = birth_time) %>% 
+  mutate(survey = str_remove(survey, ".rds")) %>% 
+  separate(survey, c("survey", "year", "quarter", "type"), sep = "_", convert = TRUE) %>% 
+  drop_na()
+surveys %>% 
+  select(-c(time)) %>%
+  spread(type, size) %>% 
+  knitr::kable()
+```
+
+
+## Reading raw data into R session
+
+
+```{r}
+hh <- 
+  tidyices:::dtrs_import(Type = "hh", surveys = "BTS-VIII") %>% 
+  tidyices:::dtrs_tidy()
+glimpse(hh)
+
+#species <- read_csv("ftp://ftp.hafro.is/pub/reiknid/einar/datras_worms.csv")
+ca <- 
+  tidyices:::dtrs_import(Type = "ca", surveys = "BTS-VIII") %>% 
+  tidyices:::dtrs_tidy()
+glimpse(ca)
+
+
+```
+
+

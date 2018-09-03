@@ -257,7 +257,7 @@ by.square %>%
 
 NOTE: Must say that for the historical part the zero catch squares (for plaice) are a bit intriguing - is it a bug in the code, the way things were recorded in different cruises or a reflection of biological truth?
 
-```{r}
+```{r, fig.height = 8}
 library(GGally)
 n.glyph <-
   by.square %>% 
